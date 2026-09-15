@@ -65,7 +65,7 @@ struct LogView: View {
                 .transition(.opacity)
             }
         }
-        .animation(.spring, value: unlocked)
+        .animation(.spring(), value: unlocked)
         .navigationTitle("Logs")
     }
 }

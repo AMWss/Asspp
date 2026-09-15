@@ -1,0 +1,106 @@
+name: iPadOS 16 - Compatibility Check
+
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  push:
+    branches: [main, ios16]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ios16-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name != 'schedule' || vars.IOS16_AUTO_BUILD == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.detect.outputs.source_sha }}
+      artifact_name: ${{ steps.detect.outputs.artifact_name }}
+      should_build: ${{ steps.detect.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check patch and OTA packaging
+        run: python3 -m unittest discover -s Resources/Scripts/ios16/tests -v
+      - name: Detect current upstream and existing unsigned artifact
+        id: detect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA=$(git ls-remote https://github.com/Lakr233/Asspp.git refs/heads/main | cut -f1)
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+          NAME="Asspp-iPad16-unsigned-${SHA:0:12}-${GITHUB_SHA:0:12}"
+          SHOULD_BUILD=true
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            COUNT=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '[.artifacts[] | select(.expired == false)] | length')
+            [ "$COUNT" = 0 ] || SHOULD_BUILD=false
+          fi
+          {
+            echo "source_sha=$SHA"
+            echo "artifact_name=$NAME"
+            echo "should_build=$SHOULD_BUILD"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: validate
+    if: needs.validate.outputs.should_build == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: compatibility
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Lakr233/Asspp
+          ref: ${{ needs.validate.outputs.source_sha }}
+          path: source
+          persist-credentials: false
+      - name: Apply reviewed compatibility patch to current upstream
+        run: python3 compatibility/Resources/Scripts/ios16/apply_compat.py source
+      - name: Select Xcode
+        run: bash compatibility/Resources/Scripts/ios16/select_xcode.sh
+      - name: Build unsigned iPad app
+        working-directory: source
+        run: |
+          set -euo pipefail
+          cat > Configuration/Developer.xcconfig <<'EOF'
+          CODE_SIGNING_ALLOWED = NO
+          CODE_SIGNING_REQUIRED = NO
+          CODE_SIGN_IDENTITY =
+          DEVELOPMENT_TEAM =
+          EOF
+          xcodebuild -workspace Asspp.xcworkspace -scheme Asspp -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -disableAutomaticPackageResolution build CODE_SIGNING_ALLOWED=NO \
+            | tee "$RUNNER_TEMP/xcodebuild.log" | xcbeautify
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Asspp.app"
+          python3 ../compatibility/Resources/Scripts/ios16/verify_macho.py "$APP"
+          mkdir -p "$RUNNER_TEMP/package/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/package/Payload/"
+          cd "$RUNNER_TEMP/package"
+          zip -qr "$RUNNER_TEMP/Asspp-iPad16-unsigned.ipa" Payload
+          python3 "$GITHUB_WORKSPACE/compatibility/Resources/Scripts/ios16/verify_ipa.py" "$RUNNER_TEMP/Asspp-iPad16-unsigned.ipa"
+      - name: Upload unsigned IPA (requires signing before installation)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.validate.outputs.artifact_name }}
+          path: ${{ runner.temp }}/Asspp-iPad16-unsigned.ipa
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios16-check-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7

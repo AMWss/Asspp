@@ -5,26 +5,23 @@
 //  Created by 秋星桥 on 2024/7/11.
 //
 
+import Combine
 import ApplePackage
 @preconcurrency import Digger
 import Foundation
 import Logging
 
-@Observable
 @MainActor
-class Downloads {
+class Downloads: ObservableObject {
     static let this = Downloads()
 
-    @ObservationIgnored
     private var _manifests = Persist<[PackageManifest]>(key: "DownloadRequests", defaultValue: [])
 
-    @ObservationIgnored
     private var lastProgressUpdates: [UUID: CFAbsoluteTime] = [:]
 
     // Manifest IDs whose Digger callbacks are already attached, so a
     // pause/resume cycle does not register a second completion handler (which
     // would run finalize() twice and destroy the downloaded bytes).
-    @ObservationIgnored
     private var registeredCallbacks: Set<UUID> = []
 
     private static let speedFormatter: ByteCountFormatter = {
@@ -36,13 +33,11 @@ class Downloads {
 
     var manifests: [PackageManifest] {
         get {
-            access(keyPath: \.manifests)
             return _manifests.wrappedValue
         }
         set {
-            withMutation(keyPath: \.manifests) {
-                _manifests.wrappedValue = newValue
-            }
+            objectWillChange.send()
+            _manifests.wrappedValue = newValue
         }
     }
 
@@ -50,10 +45,10 @@ class Downloads {
     // `state`, so every download progress tick would invalidate the badge,
     // sidebar, and AppDelegate observers and re-render the whole TabView.
     // Refresh it only when a status actually transitions.
-    private(set) var runningTaskCount: Int = 0
+    @Published private(set) var runningTaskCount: Int = 0
 
     private func refreshRunningTaskCount() {
-        runningTaskCount = manifests.count(where: { $0.state.status == .downloading })
+        runningTaskCount = manifests.filter { $0.state.status == .downloading }.count
     }
 
     private init() {

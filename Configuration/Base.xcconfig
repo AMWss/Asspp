@@ -10,7 +10,7 @@ PRODUCT_NAME = $(TARGET_NAME)
 
 // MARK: - Deployment Targets
 
-IPHONEOS_DEPLOYMENT_TARGET = 17.0
+IPHONEOS_DEPLOYMENT_TARGET = 16.0
 MACOSX_DEPLOYMENT_TARGET = 15.0
 
 // MARK: - Swift
@@ -23,7 +23,7 @@ SUPPORTED_PLATFORMS = iphoneos iphonesimulator macosx
 SUPPORTS_MACCATALYST = NO
 SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
 SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO
-TARGETED_DEVICE_FAMILY = 1,2
+TARGETED_DEVICE_FAMILY = 2
 
 // MARK: - Code Signing (Empty - Must be provided by Developer.xcconfig)
 
@@ -41,7 +41,7 @@ ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
 
 GENERATE_INFOPLIST_FILE = YES
 INFOPLIST_FILE = Asspp/Info.plist
-INFOPLIST_KEY_CFBundleDisplayName = Asspp
+INFOPLIST_KEY_CFBundleDisplayName = Asspp iPad 16
 INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.developer-tools
 INFOPLIST_KEY_NSLocalNetworkUsageDescription = Asspp requires this permission to communicate with install service on your device.
 INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES

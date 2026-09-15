@@ -89,7 +89,7 @@ struct FileListView: View {
         #else
             .searchable(text: $searchText)
         #endif
-            .animation(.spring, value: items)
+            .animation(.spring(), value: items)
             .onAppear {
                 Task {
                     await MainActor.run {

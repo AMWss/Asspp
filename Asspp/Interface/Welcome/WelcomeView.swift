@@ -14,7 +14,7 @@ struct WelcomeView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 32) {
-                Image(.avatar)
+                Image("Avatar")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 80, height: 80)

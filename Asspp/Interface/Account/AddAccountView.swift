@@ -10,7 +10,7 @@ import ButtonKit
 import SwiftUI
 
 struct AddAccountView: View {
-    @State private var vm = AppStore.this
+    @ObservedObject private var vm = AppStore.this
     @Environment(\.dismiss) private var dismiss
 
     @State private var email: String = ""
@@ -106,7 +106,7 @@ struct AddAccountView: View {
             }
         }
         .formStyle(.grouped)
-        .animation(.spring, value: codeRequired)
+        .animation(.spring(), value: codeRequired)
         #if os(iOS)
             .listStyle(.insetGrouped)
             .navigationBarTitleDisplayMode(.inline)

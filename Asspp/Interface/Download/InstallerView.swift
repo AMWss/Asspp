@@ -10,7 +10,7 @@
     import UIKit
 
     struct InstallerView: View {
-        @State var installer: Installer
+        @ObservedObject var installer: Installer
 
         var icon: String {
             switch installer.status {
@@ -83,8 +83,8 @@
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .padding(32)
             }
-            .animation(.spring, value: text)
-            .animation(.spring, value: icon)
+            .animation(.spring(), value: text)
+            .animation(.spring(), value: icon)
             .onDisappear {
                 installer.destroy()
             }

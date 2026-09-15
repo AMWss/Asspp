@@ -7,6 +7,44 @@
 
 import SwiftUI
 
+/// Empty states use the same content on iPadOS 16 and newer systems.
+struct CompatibleUnavailableView<Label: View, Description: View, Actions: View>: View {
+    private let label: Label
+    private let description: Description
+    private let actions: Actions
+
+    init(
+        @ViewBuilder label: () -> Label,
+        @ViewBuilder description: () -> Description,
+        @ViewBuilder actions: () -> Actions
+    ) {
+        self.label = label()
+        self.description = description()
+        self.actions = actions()
+    }
+
+    var body: some View {
+        if #available(iOS 17.0, macOS 14.0, *) {
+            ContentUnavailableView {
+                label
+            } description: {
+                description
+            } actions: {
+                actions
+            }
+        } else {
+            VStack(spacing: 16) {
+                label.font(.title2.bold())
+                description.foregroundStyle(.secondary)
+                actions
+            }
+            .multilineTextAlignment(.center)
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
 extension View {
     @ViewBuilder
     func mediumAndLargeDetents() -> some View {

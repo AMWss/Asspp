@@ -11,15 +11,15 @@ import SwiftUI
 
 struct AddDownloadView: View {
     @State private var bundleID: String = ""
-    @State private var searchType: EntityType = .iPhone
+    @State private var searchType: EntityType = .iPad
     @State private var selection: AppStore.UserAccount.ID = .init()
     @State private var hint = ""
     @State private var hintIsError = false
 
     @FocusState private var searchKeyFocused
 
-    @State private var avm = AppStore.this
-    @State private var dvm = Downloads.this
+    @ObservedObject private var avm = AppStore.this
+    @ObservedObject private var dvm = Downloads.this
 
     @Environment(\.dismiss) private var dismiss
 

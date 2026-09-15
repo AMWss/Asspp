@@ -1,0 +1,916 @@
+diff --git a/Asspp/App/AppDelegate+iOS.swift b/Asspp/App/AppDelegate+iOS.swift
+index 723a2ab..b8215b6 100644
+--- a/Asspp/App/AppDelegate+iOS.swift
++++ b/Asspp/App/AppDelegate+iOS.swift
+@@ -4,9 +4,12 @@
+ //
+ 
+ #if canImport(UIKit)
++    import Combine
+     import UIKit
+ 
+     class AppDelegate: NSObject, UIApplicationDelegate {
++        private var downloadCountSubscription: AnyCancellable?
++
+         var backgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
+ 
+         func application(
+@@ -21,15 +24,13 @@
+ 
+         @MainActor
+         private func observeDownloadCount() {
+-            withObservationTracking {
+-                let count = Downloads.this.runningTaskCount
+-                UIApplication.shared.isIdleTimerDisabled = count > 0
+-                BackgroundAudioPlayer.shared.setActive(count > 0)
+-            } onChange: {
+-                Task { @MainActor in
+-                    self.observeDownloadCount()
++            downloadCountSubscription = Downloads.this.$runningTaskCount
++                .removeDuplicates()
++                .receive(on: DispatchQueue.main)
++                .sink { count in
++                    UIApplication.shared.isIdleTimerDisabled = count > 0
++                    BackgroundAudioPlayer.shared.setActive(count > 0)
+                 }
+-            }
+         }
+ 
+         func applicationWillResignActive(_: UIApplication) {
+diff --git a/Asspp/App/AppDelegate+macOS.swift b/Asspp/App/AppDelegate+macOS.swift
+index 500ccf2..7c8adcc 100644
+--- a/Asspp/App/AppDelegate+macOS.swift
++++ b/Asspp/App/AppDelegate+macOS.swift
+@@ -4,9 +4,12 @@
+ //
+ 
+ #if canImport(AppKit) && !canImport(UIKit)
++    import Combine
+     import AppKit
+ 
+     class AppDelegate: NSObject, NSApplicationDelegate {
++        private var downloadCountSubscription: AnyCancellable?
++
+         var activityToken: NSObjectProtocol?
+ 
+         func applicationWillFinishLaunching(_: Notification) {
+@@ -23,15 +26,13 @@
+ 
+         @MainActor
+         private func observeDownloadCount() {
+-            withObservationTracking {
+-                let count = Downloads.this.runningTaskCount
+-                NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+-                updateProcessActivity(isDownloading: count > 0)
+-            } onChange: {
+-                Task { @MainActor in
+-                    self.observeDownloadCount()
++            downloadCountSubscription = Downloads.this.$runningTaskCount
++                .removeDuplicates()
++                .receive(on: DispatchQueue.main)
++                .sink { [weak self] count in
++                    NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
++                    self?.updateProcessActivity(isDownloading: count > 0)
+                 }
+-            }
+         }
+ 
+         private func updateProcessActivity(isDownloading: Bool) {
+diff --git a/Asspp/Backend/AppStore/AppPackageArchive.swift b/Asspp/Backend/AppStore/AppPackageArchive.swift
+index 8d6798b..aed6708 100644
+--- a/Asspp/Backend/AppStore/AppPackageArchive.swift
++++ b/Asspp/Backend/AppStore/AppPackageArchive.swift
+@@ -5,48 +5,40 @@
+ //  Created by luca on 15.09.2025.
+ //
+ 
++import Combine
+ import ApplePackage
+ import Foundation
+ import OrderedCollections
+ 
+ @MainActor
+-@Observable
+-class AppPackageArchive {
+-    @ObservationIgnored
++class AppPackageArchive: ObservableObject {
+     let accountIdentifier: String?
+-    @ObservationIgnored
+     let region: String
+ 
+-    var package: AppStore.AppPackage
++    @Published var package: AppStore.AppPackage
+ 
+     typealias VersionIdentifier = String
+-    @ObservationIgnored
+     private var _versionIdentifiers: Persist<[VersionIdentifier]>
+ 
+     var versionIdentifiers: [VersionIdentifier] {
+         get {
+-            access(keyPath: \.versionIdentifiers)
+             return _versionIdentifiers.wrappedValue
+         }
+         set {
+-            withMutation(keyPath: \.versionIdentifiers) {
+-                _versionIdentifiers.wrappedValue = newValue
+-            }
++            objectWillChange.send()
++            _versionIdentifiers.wrappedValue = newValue
+         }
+     }
+ 
+-    @ObservationIgnored
+     private var _versionItems: Persist<OrderedDictionary<VersionIdentifier, VersionMetadata>>
+ 
+     var versionItems: OrderedDictionary<VersionIdentifier, VersionMetadata> {
+         get {
+-            access(keyPath: \.versionItems)
+             return _versionItems.wrappedValue
+         }
+         set {
+-            withMutation(keyPath: \.versionItems) {
+-                _versionItems.wrappedValue = newValue
+-            }
++            objectWillChange.send()
++            _versionItems.wrappedValue = newValue
+         }
+     }
+ 
+@@ -55,9 +47,9 @@ class AppPackageArchive {
+         return versionItems.count == versionIdentifiers.count
+     }
+ 
+-    var error: String?
+-    var loading = false
+-    var shouldDismiss = false
++    @Published var error: String?
++    @Published var loading = false
++    @Published var shouldDismiss = false
+ 
+     init(accountID: String?, region: String, package: AppStore.AppPackage) {
+         accountIdentifier = accountID
+diff --git a/Asspp/Backend/AppStore/AppStore.swift b/Asspp/Backend/AppStore/AppStore.swift
+index e8aca2f..202dee7 100644
+--- a/Asspp/Backend/AppStore/AppStore.swift
++++ b/Asspp/Backend/AppStore/AppStore.swift
+@@ -5,13 +5,15 @@
+ //  Created by 秋星桥 on 2024/7/11.
+ //
+ 
++import Combine
+ import ApplePackage
+ import Foundation
+ 
+-@Observable
+ @MainActor
+-class AppStore {
+-    @ObservationIgnored
++class AppStore: ObservableObject {
++    // This model only has computed persisted properties, so keep one publisher.
++    let objectWillChange = ObservableObjectPublisher()
++
+     private var _accounts = Persist<[UserAccount]>(
+         key: "Accounts",
+         defaultValue: [],
+@@ -20,17 +22,14 @@ class AppStore {
+ 
+     var accounts: [UserAccount] {
+         get {
+-            access(keyPath: \.accounts)
+             return _accounts.wrappedValue
+         }
+         set {
+-            withMutation(keyPath: \.accounts) {
+-                _accounts.wrappedValue = newValue
+-            }
++            objectWillChange.send()
++            _accounts.wrappedValue = newValue
+         }
+     }
+ 
+-    @ObservationIgnored
+     private var _deviceIdentifier = Persist<String>(
+         key: "DeviceIdentifier",
+         defaultValue: "",
+@@ -39,29 +38,24 @@ class AppStore {
+ 
+     var deviceIdentifier: String {
+         get {
+-            access(keyPath: \.deviceIdentifier)
+             return _deviceIdentifier.wrappedValue
+         }
+         set {
+-            withMutation(keyPath: \.deviceIdentifier) {
+-                _deviceIdentifier.wrappedValue = newValue
+-            }
++            objectWillChange.send()
++            _deviceIdentifier.wrappedValue = newValue
+             ApplePackage.Configuration.deviceIdentifier = newValue
+         }
+     }
+ 
+-    @ObservationIgnored
+     private var _demoMode = Persist<Bool>(key: "DemoMode", defaultValue: false)
+ 
+     var demoMode: Bool {
+         get {
+-            access(keyPath: \.demoMode)
+             return _demoMode.wrappedValue
+         }
+         set {
+-            withMutation(keyPath: \.demoMode) {
+-                _demoMode.wrappedValue = newValue
+-            }
++            objectWillChange.send()
++            _demoMode.wrappedValue = newValue
+         }
+     }
+ 
+diff --git a/Asspp/Backend/Downloader/Downloads.swift b/Asspp/Backend/Downloader/Downloads.swift
+index 9d0ce7b..657c26c 100644
+--- a/Asspp/Backend/Downloader/Downloads.swift
++++ b/Asspp/Backend/Downloader/Downloads.swift
+@@ -5,26 +5,23 @@
+ //  Created by 秋星桥 on 2024/7/11.
+ //
+ 
++import Combine
+ import ApplePackage
+ @preconcurrency import Digger
+ import Foundation
+ import Logging
+ 
+-@Observable
+ @MainActor
+-class Downloads {
++class Downloads: ObservableObject {
+     static let this = Downloads()
+ 
+-    @ObservationIgnored
+     private var _manifests = Persist<[PackageManifest]>(key: "DownloadRequests", defaultValue: [])
+ 
+-    @ObservationIgnored
+     private var lastProgressUpdates: [UUID: CFAbsoluteTime] = [:]
+ 
+     // Manifest IDs whose Digger callbacks are already attached, so a
+     // pause/resume cycle does not register a second completion handler (which
+     // would run finalize() twice and destroy the downloaded bytes).
+-    @ObservationIgnored
+     private var registeredCallbacks: Set<UUID> = []
+ 
+     private static let speedFormatter: ByteCountFormatter = {
+@@ -36,13 +33,11 @@ class Downloads {
+ 
+     var manifests: [PackageManifest] {
+         get {
+-            access(keyPath: \.manifests)
+             return _manifests.wrappedValue
+         }
+         set {
+-            withMutation(keyPath: \.manifests) {
+-                _manifests.wrappedValue = newValue
+-            }
++            objectWillChange.send()
++            _manifests.wrappedValue = newValue
+         }
+     }
+ 
+@@ -50,10 +45,10 @@ class Downloads {
+     // `state`, so every download progress tick would invalidate the badge,
+     // sidebar, and AppDelegate observers and re-render the whole TabView.
+     // Refresh it only when a status actually transitions.
+-    private(set) var runningTaskCount: Int = 0
++    @Published private(set) var runningTaskCount: Int = 0
+ 
+     private func refreshRunningTaskCount() {
+-        runningTaskCount = manifests.count(where: { $0.state.status == .downloading })
++        runningTaskCount = manifests.filter { $0.state.status == .downloading }.count
+     }
+ 
+     private init() {
+diff --git a/Asspp/Backend/Downloader/PackageManifest.swift b/Asspp/Backend/Downloader/PackageManifest.swift
+index e16b18c..0944fdb 100644
+--- a/Asspp/Backend/Downloader/PackageManifest.swift
++++ b/Asspp/Backend/Downloader/PackageManifest.swift
+@@ -5,6 +5,7 @@
+ //  Created by 秋星桥 on 2024/7/13.
+ //
+ 
++import Combine
+ import ApplePackage
+ import Foundation
+ 
+@@ -14,20 +15,19 @@ private let packagesDir = {
+     return ret
+ }()
+ 
+-@Observable
+-class PackageManifest: Identifiable, Codable, Hashable, Equatable {
+-    @ObservationIgnored private(set) var id: UUID = .init()
++class PackageManifest: ObservableObject, Identifiable, Codable, Hashable, Equatable {
++    private(set) var id: UUID = .init()
+ 
+-    @ObservationIgnored private(set) var account: AppStore.UserAccount
+-    @ObservationIgnored private(set) var package: AppStore.AppPackage
++    private(set) var account: AppStore.UserAccount
++    private(set) var package: AppStore.AppPackage
+ 
+-    @ObservationIgnored private(set) var url: URL
+-    @ObservationIgnored private(set) var signatures: [ApplePackage.Sinf]
+-    @ObservationIgnored private(set) var iTunesMetadata: Data
++    private(set) var url: URL
++    private(set) var signatures: [ApplePackage.Sinf]
++    private(set) var iTunesMetadata: Data
+ 
+-    @ObservationIgnored private(set) var creation: Date
++    private(set) var creation: Date
+ 
+-    var state: PackageState = .init()
++    @Published var state: PackageState = .init()
+ 
+     var targetLocation: URL {
+         packagesDir
+diff --git a/Asspp/Backend/Installer/Installer.swift b/Asspp/Backend/Installer/Installer.swift
+index 459385c..fee437f 100644
+--- a/Asspp/Backend/Installer/Installer.swift
++++ b/Asspp/Backend/Installer/Installer.swift
+@@ -5,6 +5,7 @@
+ //  Created by 秋星桥 on 2024/7/10.
+ //
+ 
++import Combine
+ import ApplePackage
+ import Logging
+ #if canImport(UIKit)
+@@ -12,12 +13,11 @@ import Logging
+ #endif
+ import Vapor
+ 
+-@Observable
+-class Installer: Identifiable, @unchecked Sendable {
+-    @ObservationIgnored let id: UUID
+-    @ObservationIgnored let app: Application
+-    @ObservationIgnored let archive: AppStore.AppPackage
+-    @ObservationIgnored let port = Int.random(in: 4000 ... 8000)
++class Installer: ObservableObject, Identifiable, @unchecked Sendable {
++    let id: UUID
++    let app: Application
++    let archive: AppStore.AppPackage
++    let port = Int.random(in: 4000 ... 8000)
+ 
+     enum Status {
+         case ready
+@@ -28,7 +28,7 @@ class Installer: Identifiable, @unchecked Sendable {
+     }
+ 
+     @MainActor
+-    var status: Status = .ready
++    @Published var status: Status = .ready
+ 
+     init(archive: AppStore.AppPackage, path packagePath: URL) async throws {
+         let id: UUID = .init()
+diff --git a/Asspp/Interface/Account/AccountDetailView.swift b/Asspp/Interface/Account/AccountDetailView.swift
+index cc69d34..2737c91 100644
+--- a/Asspp/Interface/Account/AccountDetailView.swift
++++ b/Asspp/Interface/Account/AccountDetailView.swift
+@@ -12,7 +12,7 @@ import SwiftUI
+ struct AccountDetailView: View {
+     let accountId: AppStore.UserAccount.ID
+ 
+-    @State private var vm = AppStore.this
++    @ObservedObject private var vm = AppStore.this
+     @Environment(\.dismiss) var dismiss
+ 
+     private var account: AppStore.UserAccount? {
+diff --git a/Asspp/Interface/Account/AccountView.swift b/Asspp/Interface/Account/AccountView.swift
+index bba6444..c7ac8f7 100644
+--- a/Asspp/Interface/Account/AccountView.swift
++++ b/Asspp/Interface/Account/AccountView.swift
+@@ -9,7 +9,7 @@ import ApplePackage
+ import SwiftUI
+ 
+ struct AccountView: View {
+-    @State private var vm = AppStore.this
++    @ObservedObject private var vm = AppStore.this
+     @State private var addAccount = false
+     @State private var selectedID: AppStore.UserAccount.ID?
+     @State private var navigationPath = NavigationPath()
+@@ -78,7 +78,7 @@ struct AccountView: View {
+             .frame(maxWidth: .infinity, maxHeight: .infinity)
+             .overlay {
+                 if vm.accounts.isEmpty {
+-                    ContentUnavailableView(
++                    CompatibleUnavailableView(
+                         label: {
+                             Label("No Accounts", systemImage: "person.crop.circle.badge.questionmark")
+                         },
+@@ -121,7 +121,7 @@ struct AccountView: View {
+             NavigationStack(path: $navigationPath) {
+                 Group {
+                     if vm.accounts.isEmpty {
+-                        ContentUnavailableView(
++                        CompatibleUnavailableView(
+                             label: {
+                                 Label("No Accounts", systemImage: "person.crop.circle.badge.questionmark")
+                             },
+diff --git a/Asspp/Interface/Account/AddAccountView.swift b/Asspp/Interface/Account/AddAccountView.swift
+index 9bfdb14..56ad085 100644
+--- a/Asspp/Interface/Account/AddAccountView.swift
++++ b/Asspp/Interface/Account/AddAccountView.swift
+@@ -10,7 +10,7 @@ import ButtonKit
+ import SwiftUI
+ 
+ struct AddAccountView: View {
+-    @State private var vm = AppStore.this
++    @ObservedObject private var vm = AppStore.this
+     @Environment(\.dismiss) private var dismiss
+ 
+     @State private var email: String = ""
+@@ -106,7 +106,7 @@ struct AddAccountView: View {
+             }
+         }
+         .formStyle(.grouped)
+-        .animation(.spring, value: codeRequired)
++        .animation(.spring(), value: codeRequired)
+         #if os(iOS)
+             .listStyle(.insetGrouped)
+             .navigationBarTitleDisplayMode(.inline)
+diff --git a/Asspp/Interface/Download/AddDownloadView.swift b/Asspp/Interface/Download/AddDownloadView.swift
+index 7309efd..b2ee100 100644
+--- a/Asspp/Interface/Download/AddDownloadView.swift
++++ b/Asspp/Interface/Download/AddDownloadView.swift
+@@ -11,15 +11,15 @@ import SwiftUI
+ 
+ struct AddDownloadView: View {
+     @State private var bundleID: String = ""
+-    @State private var searchType: EntityType = .iPhone
++    @State private var searchType: EntityType = .iPad
+     @State private var selection: AppStore.UserAccount.ID = .init()
+     @State private var hint = ""
+     @State private var hintIsError = false
+ 
+     @FocusState private var searchKeyFocused
+ 
+-    @State private var avm = AppStore.this
+-    @State private var dvm = Downloads.this
++    @ObservedObject private var avm = AppStore.this
++    @ObservedObject private var dvm = Downloads.this
+ 
+     @Environment(\.dismiss) private var dismiss
+ 
+diff --git a/Asspp/Interface/Download/DownloadView.swift b/Asspp/Interface/Download/DownloadView.swift
+index f0f528a..950f5df 100644
+--- a/Asspp/Interface/Download/DownloadView.swift
++++ b/Asspp/Interface/Download/DownloadView.swift
+@@ -8,7 +8,7 @@
+ import SwiftUI
+ 
+ struct DownloadView: View {
+-    @State private var vm = Downloads.this
++    @ObservedObject private var vm = Downloads.this
+ 
+     var body: some View {
+         NavigationStack {
+@@ -20,7 +20,7 @@ struct DownloadView: View {
+     private var content: some View {
+         Group {
+             if vm.manifests.isEmpty {
+-                ContentUnavailableView(
++                CompatibleUnavailableView(
+                     label: {
+                         Label("No Downloads", systemImage: "arrow.down.circle")
+                     },
+@@ -59,15 +59,15 @@ struct DownloadView: View {
+ }
+ 
+ private struct PackageManifestRow: View {
+-    let manifest: PackageManifest
+-    @State private var vm = Downloads.this
++    @ObservedObject var manifest: PackageManifest
++    @ObservedObject private var vm = Downloads.this
+ 
+     var body: some View {
+         NavigationLink(value: manifest) {
+             VStack(spacing: 8) {
+                 ArchivePreviewView(archive: manifest.package)
+                 SimpleProgress(progress: manifest.state.percent)
+-                    .animation(.interactiveSpring, value: manifest.state.percent)
++                    .animation(.interactiveSpring(), value: manifest.state.percent)
+                 HStack {
+                     Text(manifest.hint)
+                     Spacer()
+diff --git a/Asspp/Interface/Download/FileAnalysisView.swift b/Asspp/Interface/Download/FileAnalysisView.swift
+index cd0b656..05118bc 100644
+--- a/Asspp/Interface/Download/FileAnalysisView.swift
++++ b/Asspp/Interface/Download/FileAnalysisView.swift
+@@ -88,8 +88,8 @@ struct FileAnalysisView: View {
+             }
+         }
+         .formStyle(.grouped)
+-        .animation(.spring, value: relativePath)
+-        .animation(.spring, value: extractedFile)
++        .animation(.spring(), value: relativePath)
++        .animation(.spring(), value: extractedFile)
+         .onAppear {
+             message = "Examining contents..."
+             Task {
+diff --git a/Asspp/Interface/Download/FileListView.swift b/Asspp/Interface/Download/FileListView.swift
+index a82da62..a5c68f9 100644
+--- a/Asspp/Interface/Download/FileListView.swift
++++ b/Asspp/Interface/Download/FileListView.swift
+@@ -89,7 +89,7 @@ struct FileListView: View {
+         #else
+             .searchable(text: $searchText)
+         #endif
+-            .animation(.spring, value: items)
++            .animation(.spring(), value: items)
+             .onAppear {
+                 Task {
+                     await MainActor.run {
+diff --git a/Asspp/Interface/Download/InstallerView.swift b/Asspp/Interface/Download/InstallerView.swift
+index 021ced7..d524b25 100644
+--- a/Asspp/Interface/Download/InstallerView.swift
++++ b/Asspp/Interface/Download/InstallerView.swift
+@@ -10,7 +10,7 @@
+     import UIKit
+ 
+     struct InstallerView: View {
+-        @State var installer: Installer
++        @ObservedObject var installer: Installer
+ 
+         var icon: String {
+             switch installer.status {
+@@ -83,8 +83,8 @@
+                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                 .padding(32)
+             }
+-            .animation(.spring, value: text)
+-            .animation(.spring, value: icon)
++            .animation(.spring(), value: text)
++            .animation(.spring(), value: icon)
+             .onDisappear {
+                 installer.destroy()
+             }
+diff --git a/Asspp/Interface/Download/PackageView.swift b/Asspp/Interface/Download/PackageView.swift
+index 05fb9cf..8597210 100644
+--- a/Asspp/Interface/Download/PackageView.swift
++++ b/Asspp/Interface/Download/PackageView.swift
+@@ -15,7 +15,7 @@ import SwiftUI
+ #endif
+ 
+ struct PackageView: View {
+-    @State var pkg: PackageManifest
++    @ObservedObject var pkg: PackageManifest
+ 
+     var archive: AppStore.AppPackage {
+         pkg.package
+@@ -34,8 +34,8 @@ struct PackageView: View {
+         @State private var copied = false
+     #endif
+ 
+-    @State private var vm = AppStore.this
+-    @State private var downloads = Downloads.this
++    @ObservedObject private var vm = AppStore.this
++    @ObservedObject private var downloads = Downloads.this
+ 
+     var body: some View {
+         Form {
+diff --git a/Asspp/Interface/Download/SimpleProgress.swift b/Asspp/Interface/Download/SimpleProgress.swift
+index 62785cd..1b163f2 100644
+--- a/Asspp/Interface/Download/SimpleProgress.swift
++++ b/Asspp/Interface/Download/SimpleProgress.swift
+@@ -15,7 +15,7 @@ struct SimpleProgress: View {
+             .overlay {
+                 GeometryReader { r in
+                     Rectangle()
+-                        .foregroundStyle(.accent)
++                        .foregroundStyle(Color.accentColor)
+                         .frame(width: progress * r.size.width)
+                         .frame(maxWidth: .infinity, alignment: .leading)
+                 }
+diff --git a/Asspp/Interface/Installed/InstalledListView.swift b/Asspp/Interface/Installed/InstalledListView.swift
+index 2b3dac1..974e9ab 100644
+--- a/Asspp/Interface/Installed/InstalledListView.swift
++++ b/Asspp/Interface/Installed/InstalledListView.swift
+@@ -67,7 +67,7 @@
+     }
+ 
+     private struct AppRow: View {
+-        @State var vm = AppStore.this
++        @ObservedObject var vm = AppStore.this
+         var preferredIconSize: CGFloat? {
+             50
+         }
+diff --git a/Asspp/Interface/Search/ProductHistoryView.swift b/Asspp/Interface/Search/ProductHistoryView.swift
+index e705bdb..1f653e3 100644
+--- a/Asspp/Interface/Search/ProductHistoryView.swift
++++ b/Asspp/Interface/Search/ProductHistoryView.swift
+@@ -9,7 +9,7 @@ import ApplePackage
+ import SwiftUI
+ 
+ struct ProductHistoryView: View {
+-    @State var vm: AppPackageArchive
++    @ObservedObject var vm: AppPackageArchive
+     @State private var showErrorAlert = false
+     @Environment(\.dismiss) var dismiss
+ 
+@@ -30,7 +30,7 @@ struct ProductHistoryView: View {
+                     } label: {
+                         HStack {
+                             Text(pkg.software.version)
+-                                .foregroundStyle(.accent)
++                                .foregroundStyle(Color.accentColor)
+                             Spacer()
+                         }
+                         .contentShape(Rectangle())
+@@ -110,7 +110,7 @@ struct ProductHistoryView: View {
+         } message: {
+             Text(vm.error ?? String(localized: "Unknown Error"))
+         }
+-        .onChange(of: vm.error) { _, newValue in
++        .onChange(of: vm.error) { newValue in
+             showErrorAlert = newValue != nil
+         }
+         .onAppear {
+@@ -123,7 +123,7 @@ struct ProductHistoryView: View {
+ 
+     private var toolbarPlacement: ToolbarItemPlacement {
+         #if os(iOS)
+-            .topBarTrailing
++            .navigationBarTrailing
+         #else
+             .automatic
+         #endif
+diff --git a/Asspp/Interface/Search/ProductView.swift b/Asspp/Interface/Search/ProductView.swift
+index c092b53..3945c06 100644
+--- a/Asspp/Interface/Search/ProductView.swift
++++ b/Asspp/Interface/Search/ProductView.swift
+@@ -11,7 +11,7 @@ import Kingfisher
+ import SwiftUI
+ 
+ struct ProductView: View {
+-    @State private var archive: AppPackageArchive
++    @StateObject private var archive: AppPackageArchive
+     @Binding var navigationPath: NavigationPath
+ 
+     var region: String {
+@@ -19,12 +19,12 @@ struct ProductView: View {
+     }
+ 
+     init(archive: AppStore.AppPackage, region: String, navigationPath: Binding<NavigationPath>) {
+-        _archive = State(initialValue: AppPackageArchive(accountID: nil, region: region, package: archive))
++        _archive = StateObject(wrappedValue: AppPackageArchive(accountID: nil, region: region, package: archive))
+         _navigationPath = navigationPath
+     }
+ 
+-    @State private var vm = AppStore.this
+-    @State private var dvm = Downloads.this
++    @ObservedObject private var vm = AppStore.this
++    @ObservedObject private var dvm = Downloads.this
+ 
+     var eligibleAccounts: [AppStore.UserAccount] {
+         vm.eligibleAccounts(for: region)
+diff --git a/Asspp/Interface/Search/SearchView.swift b/Asspp/Interface/Search/SearchView.swift
+index 0f4bd4f..a6eff0f 100644
+--- a/Asspp/Interface/Search/SearchView.swift
++++ b/Asspp/Interface/Search/SearchView.swift
+@@ -5,6 +5,7 @@
+ //  Created by 秋星桥 on 2024/7/11.
+ //
+ 
++import Combine
+ import ApplePackage
+ import Kingfisher
+ import SwiftUI
+@@ -14,10 +15,9 @@ import SwiftUI
+ /// clears it — so the one-shot survives the view being recreated when the user
+ /// switches sidebar sections.
+ @MainActor
+-@Observable
+-final class SearchFieldFocus {
++final class SearchFieldFocus: ObservableObject {
+     static let shared = SearchFieldFocus()
+-    var pending = false
++    @Published var pending = false
+     func requestFocus() { pending = true }
+ }
+ 
+@@ -25,8 +25,8 @@ struct SearchView: View {
+     @AppStorage("searchKey") var searchKey = ""
+     @AppStorage("searchRegion") var searchRegion = "US"
+     @FocusState var searchKeyFocused
+-    @State private var searchFocus = SearchFieldFocus.shared
+-    @State private var searchType = EntityType.iPhone
++    @ObservedObject private var searchFocus = SearchFieldFocus.shared
++    @State private var searchType = EntityType.iPad
+ 
+     @State private var searching = false
+     let regionKeys = Array(ApplePackage.Configuration.storeFrontValues.keys.sorted())
+@@ -40,7 +40,7 @@ struct SearchView: View {
+     #endif
+ 
+     @State private var navigationPath = NavigationPath()
+-    @State private var vm = AppStore.this
++    @ObservedObject private var vm = AppStore.this
+     @Environment(\.horizontalSizeClass) var horizontalSizeClass
+     var possibleRegion: Set<String> {
+         vm.possibleRegions
+@@ -70,7 +70,7 @@ struct SearchView: View {
+         } label: {
+             Label("Type", systemImage: searchType.iconName)
+         }
+-        .onChange(of: searchType) { _, _ in
++        .onChange(of: searchType) { _ in
+             searchResult = []
+         }
+     }
+@@ -105,7 +105,7 @@ struct SearchView: View {
+         } label: {
+             Label(searchRegion, systemImage: "globe")
+         }
+-        .onChange(of: searchRegion) { _, _ in
++        .onChange(of: searchRegion) { _ in
+             searchResult = []
+         }
+     }
+@@ -150,16 +150,16 @@ struct SearchView: View {
+             }
+         }
+         .formStyle(.grouped)
+-        .animation(.spring, value: searchError)
++        .animation(.spring(), value: searchError)
+         .navigationDestination(for: ProductDestination.self) { dest in
+             ProductView(archive: dest.archive, region: dest.region, navigationPath: $navigationPath)
+         }
+         .navigationDestination(for: PackageManifest.self) { manifest in
+             PackageView(pkg: manifest)
+         }
+-        .animation(.spring, value: searchResult)
++        .animation(.spring(), value: searchResult)
+         .onAppear { consumePendingFocus() }
+-        .onChange(of: searchFocus.pending) { _, isPending in
++        .onChange(of: searchFocus.pending) { isPending in
+             if isPending { consumePendingFocus() }
+         }
+     }
+@@ -274,8 +274,8 @@ extension SearchView {
+                         .padding([.bottom, .horizontal])
+                     }
+                 }
+-                .animation(.spring, value: searchResult)
+-                .animation(.spring, value: searching)
++                .animation(.spring(), value: searchResult)
++                .animation(.spring(), value: searching)
+         }
+ 
+         var navigationBarVisibility: Visibility {
+diff --git a/Asspp/Interface/Setting/LogView.swift b/Asspp/Interface/Setting/LogView.swift
+index 2eb6263..e408896 100644
+--- a/Asspp/Interface/Setting/LogView.swift
++++ b/Asspp/Interface/Setting/LogView.swift
+@@ -65,7 +65,7 @@ struct LogView: View {
+                 .transition(.opacity)
+             }
+         }
+-        .animation(.spring, value: unlocked)
++        .animation(.spring(), value: unlocked)
+         .navigationTitle("Logs")
+     }
+ }
+diff --git a/Asspp/Interface/Setting/SettingView.swift b/Asspp/Interface/Setting/SettingView.swift
+index 5541496..d186ebe 100644
+--- a/Asspp/Interface/Setting/SettingView.swift
++++ b/Asspp/Interface/Setting/SettingView.swift
+@@ -14,7 +14,7 @@ import SwiftUI
+ 
+ struct SettingView: View {
+     @Environment(\.openURL) private var openURL
+-    @State private var vm = AppStore.this
++    @ObservedObject private var vm = AppStore.this
+ 
+     @State private var deviceIdTapCount = 0
+     @State private var showDeviceIdWarning = false
+diff --git a/Asspp/Interface/Utils/ViewBackports.swift b/Asspp/Interface/Utils/ViewBackports.swift
+index fab7584..0958732 100644
+--- a/Asspp/Interface/Utils/ViewBackports.swift
++++ b/Asspp/Interface/Utils/ViewBackports.swift
+@@ -7,6 +7,44 @@
+ 
+ import SwiftUI
+ 
++/// Empty states use the same content on iPadOS 16 and newer systems.
++struct CompatibleUnavailableView<Label: View, Description: View, Actions: View>: View {
++    private let label: Label
++    private let description: Description
++    private let actions: Actions
++
++    init(
++        @ViewBuilder label: () -> Label,
++        @ViewBuilder description: () -> Description,
++        @ViewBuilder actions: () -> Actions
++    ) {
++        self.label = label()
++        self.description = description()
++        self.actions = actions()
++    }
++
++    var body: some View {
++        if #available(iOS 17.0, macOS 14.0, *) {
++            ContentUnavailableView {
++                label
++            } description: {
++                description
++            } actions: {
++                actions
++            }
++        } else {
++            VStack(spacing: 16) {
++                label.font(.title2.bold())
++                description.foregroundStyle(.secondary)
++                actions
++            }
++            .multilineTextAlignment(.center)
++            .padding(24)
++            .frame(maxWidth: .infinity, maxHeight: .infinity)
++        }
++    }
++}
++
+ extension View {
+     @ViewBuilder
+     func mediumAndLargeDetents() -> some View {
+diff --git a/Asspp/Interface/Welcome/MainView.swift b/Asspp/Interface/Welcome/MainView.swift
+index e496326..7cd24b7 100644
+--- a/Asspp/Interface/Welcome/MainView.swift
++++ b/Asspp/Interface/Welcome/MainView.swift
+@@ -24,7 +24,7 @@ struct MainView: View {
+ #if os(macOS)
+     private struct MacSidebarMainView: View {
+         @State private var selection: SidebarSection? = .home
+-        @State private var downloads = Downloads.this
++        @ObservedObject private var downloads = Downloads.this
+ 
+         var body: some View {
+             NavigationSplitView {
+@@ -174,7 +174,7 @@ struct MainView: View {
+     }
+ #else
+     private struct LegacyTabMainView: View {
+-        @State var dvm = Downloads.this
++        @ObservedObject var dvm = Downloads.this
+ 
+         var body: some View {
+             TabView {
+@@ -197,7 +197,7 @@ struct MainView: View {
+ 
+     @available(iOS 18.0, *)
+     struct NewMainView: View {
+-        @State var dvm = Downloads.this
++        @ObservedObject var dvm = Downloads.this
+ 
+         var body: some View {
+             TabView {
+diff --git a/Asspp/Interface/Welcome/WelcomeView.swift b/Asspp/Interface/Welcome/WelcomeView.swift
+index d19932b..c0f1d0a 100644
+--- a/Asspp/Interface/Welcome/WelcomeView.swift
++++ b/Asspp/Interface/Welcome/WelcomeView.swift
+@@ -14,7 +14,7 @@ struct WelcomeView: View {
+     var body: some View {
+         ZStack {
+             VStack(spacing: 32) {
+-                Image(.avatar)
++                Image("Avatar")
+                     .resizable()
+                     .aspectRatio(contentMode: .fit)
+                     .frame(width: 80, height: 80)
+diff --git a/Configuration/Base.xcconfig b/Configuration/Base.xcconfig
+index 0f73121..9bae4e9 100644
+--- a/Configuration/Base.xcconfig
++++ b/Configuration/Base.xcconfig
+@@ -10,7 +10,7 @@ PRODUCT_NAME = $(TARGET_NAME)
+ 
+ // MARK: - Deployment Targets
+ 
+-IPHONEOS_DEPLOYMENT_TARGET = 17.0
++IPHONEOS_DEPLOYMENT_TARGET = 16.0
+ MACOSX_DEPLOYMENT_TARGET = 15.0
+ 
+ // MARK: - Swift
+@@ -23,7 +23,7 @@ SUPPORTED_PLATFORMS = iphoneos iphonesimulator macosx
+ SUPPORTS_MACCATALYST = NO
+ SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
+ SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO
+-TARGETED_DEVICE_FAMILY = 1,2
++TARGETED_DEVICE_FAMILY = 2
+ 
+ // MARK: - Code Signing (Empty - Must be provided by Developer.xcconfig)
+ 
+@@ -41,7 +41,7 @@ ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+ 
+ GENERATE_INFOPLIST_FILE = YES
+ INFOPLIST_FILE = Asspp/Info.plist
+-INFOPLIST_KEY_CFBundleDisplayName = Asspp
++INFOPLIST_KEY_CFBundleDisplayName = Asspp iPad 16
+ INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.developer-tools
+ INFOPLIST_KEY_NSLocalNetworkUsageDescription = Asspp requires this permission to communicate with install service on your device.
+ INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
