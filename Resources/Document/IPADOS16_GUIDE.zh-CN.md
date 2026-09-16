@@ -9,9 +9,11 @@
 
 ## 当前交付状态
 
-已完成源码兼容改动、上游补丁、未签名构建流程、可选签名 OTA 流程及本地脚本测试。
-**尚未通过 Xcode 编译和 iPadOS 16.0 实机验证；目前不能宣称登录或下载问题已解决。**
-本地 Windows 不能运行 Xcode，需要将这些文件提交到你的 fork 后运行下面的工作流。
+源码和工作流已提交到此 fork，11 项本地测试已通过。
+[首个构建](https://github.com/AMWss/Asspp/actions/runs/34949862462)已通过 Xcode 26.6 编译、
+包内二进制最低系统检查及 IPA 检查，生成 `wiki.qaq.Asspp`、最低 iOS 16.0 的 iPad 包。
+**尚未进行 iPadOS 16.0 实机登录、App Store 下载验证，不能据此宣称这两项已解决。**
+iPad 自动跟随上游已开启。iPhone 的 Pages 已配置为 Actions 部署，但签名 Secrets 尚未配置，OTA 尚未上线。
 
 ## iPad：通过巨魔安装兼容 IPA
 
@@ -19,7 +21,8 @@ iPad 已安装 TrollStore（巨魔），可以用它安装兼容 IPA，无需为
 
 1. 将兼容改动提交到你的 fork，打开 [Actions](https://github.com/AMWss/Asspp/actions)。
 2. 启用 fork 的 Actions，运行 **iPadOS 16 - Compatibility Check**。
-3. 构建通过后，在该次运行的 Artifacts 中下载 `Asspp-iPad16-unsigned-…`，解压得到 IPA。
+3. 默认分支构建通过后，在 [Releases](https://github.com/AMWss/Asspp/releases) 中选择标题为 **Asspp iPadOS 16** 的版本，下载 `Asspp-iPad16-unsigned.ipa`。
+   也可从对应运行的 Artifacts 下载 `Asspp-iPad16-unsigned-…`，解压得到 IPA。
 4. 将 IPA 交给 iPad 上的 TrollStore 安装，之后同样用新 IPA 覆盖更新。
 5. 完成下文 iPadOS 16.0 的实机验收。
 

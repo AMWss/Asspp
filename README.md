@@ -6,7 +6,7 @@
 - iPhone iOS 18：正常上游版本，另配分发签名后通过 Safari OTA 安装更新。
 
 参见 [中文配置与验证说明](Resources/Document/IPADOS16_GUIDE.zh-CN.md)。
-当前改动仍待 Xcode 编译和实机验证。
+iPad 版已通过 Xcode 编译和包检查，登录及下载仍待实机验证；iPhone OTA 还需配置分发签名。
 
 **The Ultimate Multi-Region App Store Manager.**
 

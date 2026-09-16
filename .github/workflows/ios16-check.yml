@@ -55,6 +55,8 @@ jobs:
     needs: validate
     if: needs.validate.outputs.should_build == 'true'
     runs-on: macos-26
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,7 +93,33 @@ jobs:
           cd "$RUNNER_TEMP/package"
           zip -qr "$RUNNER_TEMP/Asspp-iPad16-unsigned.ipa" Payload
           python3 "$GITHUB_WORKSPACE/compatibility/Resources/Scripts/ios16/verify_ipa.py" "$RUNNER_TEMP/Asspp-iPad16-unsigned.ipa"
-      - name: Upload unsigned IPA (requires signing before installation)
+      - name: Publish iPad IPA for TrollStore
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          ARTIFACT_NAME: ${{ needs.validate.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          TAG="ipad16-${ARTIFACT_NAME#Asspp-iPad16-unsigned-}"
+          cat > "$RUNNER_TEMP/ipad-release.md" <<EOF
+          Asspp for iPadOS 16.0 and later, iPad only. Install the IPA using TrollStore.
+
+          - Upstream source: https://github.com/Lakr233/Asspp/commit/${SOURCE_SHA}
+          - Compatibility source: https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}
+          - Passed Xcode compilation, minimum OS checks and IPA metadata validation.
+          - Apple ID login and App Store download still require testing on your device.
+          - This unsigned iPad build is not the iPhone Safari OTA package.
+          EOF
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/ipad-release.md"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Asspp iPadOS 16 (${SOURCE_SHA:0:12})" --notes-file "$RUNNER_TEMP/ipad-release.md" --latest=false
+          fi
+          gh release upload "$TAG" "$RUNNER_TEMP/Asspp-iPad16-unsigned.ipa" --repo "$GITHUB_REPOSITORY" --clobber
+          echo "[Download iPad IPA](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/Asspp-iPad16-unsigned.ipa)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload iPad IPA (TrollStore or external signing)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.validate.outputs.artifact_name }}
