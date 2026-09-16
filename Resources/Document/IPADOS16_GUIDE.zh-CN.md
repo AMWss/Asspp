@@ -26,7 +26,8 @@ iPad 已安装 TrollStore（巨魔），可以用它安装兼容 IPA，无需为
 4. 将 IPA 交给 iPad 上的 TrollStore 安装，之后同样用新 IPA 覆盖更新。
 5. 完成下文 iPadOS 16.0 的实机验收。
 
-应用名称为 **Asspp iPad 16**，最低版本 16.0，只面向 iPad；默认搜索 iPad 应用。
+发布标题为 **Asspp iPadOS 16**，桌面应用名仍为 **Asspp**（上游项目目标的名称设置优先）。
+最低版本 16.0，只面向 iPad；默认搜索 iPad 应用。
 默认 Bundle ID 仍为 `wiki.qaq.Asspp`，因此可能覆盖原版。若安装工具改变 Bundle ID 或签名团队，
 原版的钥匙串账号未必可访问，届时重新登录。账号数据不写入 GitHub。
 
