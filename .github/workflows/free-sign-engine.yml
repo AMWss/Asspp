@@ -6,6 +6,9 @@ on:
       operation:
         type: string
         required: true
+      build_from_source:
+        type: boolean
+        default: true
       target_run_id:
         type: string
         default: ""
@@ -30,7 +33,7 @@ jobs:
   sign:
     if: inputs.operation == 'Sign IPA'
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: free-sign-apple-account
       cancel-in-progress: false
@@ -78,6 +81,37 @@ jobs:
           cargo +1.99.1 build --locked --release
       - name: Run offline safety checks
         run: python3 -m unittest discover -s Tools/FreeSign/tests -v
+      - name: Checkout application source
+        if: inputs.build_from_source
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: app-source
+          persist-credentials: false
+      - name: Build unsigned IPA from main
+        if: inputs.build_from_source
+        working-directory: app-source
+        run: |
+          set -euo pipefail
+          XCODE=$(find /Applications -maxdepth 1 -name 'Xcode*.app' | grep -viE 'beta|_rc' | sort -V | tail -1)
+          test -n "$XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          mkdir -p Configuration
+          cat > Configuration/Developer.xcconfig <<'EOF'
+          CODE_SIGNING_ALLOWED = NO
+          CODE_SIGNING_REQUIRED = NO
+          CODE_SIGN_IDENTITY =
+          DEVELOPMENT_TEAM =
+          EOF
+          xcodebuild -workspace Asspp.xcworkspace -scheme Asspp -configuration Release \\
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/AppDerivedData" \\
+            -disableAutomaticPackageResolution build CODE_SIGNING_ALLOWED=NO \\
+            | tee "$RUNNER_TEMP/app-build.log" | xcbeautify
+          mkdir -p "$RUNNER_TEMP/app-package/Payload"
+          cp -R "$RUNNER_TEMP/AppDerivedData/Build/Products/Release-iphoneos/Asspp.app" "$RUNNER_TEMP/app-package/Payload/"
+          cd "$RUNNER_TEMP/app-package"
+          ditto -c -k --keepParent Payload "$INPUT_IPA"
       - name: Restore encrypted signing state
         id: state
         env:
@@ -94,6 +128,7 @@ jobs:
           path: ${{ runner.temp }}/free-sign-mailbox/request.json
           retention-days: 1
       - name: Download official Asspp IPA
+        if: ${{ !inputs.build_from_source }}
         run: python3 Tools/FreeSign/actions.py download
       - name: Sign with your Apple ID
         env:
