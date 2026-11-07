@@ -2,6 +2,11 @@ name: Sign SideStore Nightly
 
 on:
   workflow_dispatch:
+    inputs:
+      reset_all_certificates:
+        description: Revoke ALL iOS development certificates before signing (affects existing apps)
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: [.github/workflows/sidestore-sign.yml]
@@ -18,6 +23,7 @@ jobs:
     with:
       operation: Sign IPA
       application: SideStore
+      reset_all_certificates: ${{ inputs.reset_all_certificates || (github.event_name == 'push' && github.event.head_commit.message == 'Reset developer certificates for authorized SideStore setup 2026-11-07') }}
       build_from_source: false
     secrets:
       APPLE_ID: ${{ secrets.APPLE_ID }}
