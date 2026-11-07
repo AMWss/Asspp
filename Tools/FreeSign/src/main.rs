@@ -2,7 +2,7 @@ use std::{env, fs, future, path::PathBuf};
 
 use isideload::{
     anisette::remote_v3::RemoteV3AnisetteProvider,
-    auth::apple_account::{AppleAccount, TwoFactorCallbackResponse},
+    auth::apple_account::{AppleAccount, TwoFactorCallbackParams, TwoFactorCallbackResponse},
     dev::{developer_session::DeveloperSession, devices::DevicesApi, teams::TeamsApi},
     sideload::{SideloaderBuilder, TeamSelection, builder::MaxCertsBehavior},
     util::{
@@ -42,10 +42,18 @@ async fn run() -> Result<(), Report> {
     }
     if session.is_none() {
         println!("Authenticating with Apple. A verification code may be requested.");
-        account.login(&password, move |_| {
+        account.login(&password, move |challenge: TwoFactorCallbackParams| {
             let helper = helper.clone();
             async move {
-                println!("Waiting for 2FA. Set APPLE_2FA_CODE, then run the Send verification code action.");
+                if challenge.unknown {
+                    println!("::notice::Apple requested another verification method. Requesting a code on trusted devices.");
+                    return Ok(TwoFactorCallbackResponse::SendToDevices);
+                }
+                if challenge.last_error.is_some() {
+                    println!("::warning::Apple did not accept the previous verification code. Requesting a fresh code; update APPLE_2FA_CODE and send it again.");
+                    return Ok(TwoFactorCallbackResponse::ResendCode);
+                }
+                println!("::notice::Waiting for 2FA. Set APPLE_2FA_CODE to the latest code, then run the Send verification code action.");
                 let response = tokio::process::Command::new("python3")
                     .arg(helper).arg("wait-code").output().await?;
                 if !response.status.success() {
@@ -55,6 +63,7 @@ async fn run() -> Result<(), Report> {
                 if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
                     bail!("Invalid verification code response");
                 }
+                println!("::notice::Received the encrypted verification code. Submitting it to Apple.");
                 Ok(TwoFactorCallbackResponse::SubmitCode(code))
             }
         }).await?;
