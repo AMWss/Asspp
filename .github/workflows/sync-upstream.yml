@@ -34,6 +34,7 @@ jobs:
 
           overlays=(
             .github/workflows/free-sign.yml
+            .github/workflows/sidestore-sign.yml
             .github/workflows/sync-upstream.yml
             .github/workflows/ios16-check.yml
             .github/workflows/upstream-signed-ios.yml
