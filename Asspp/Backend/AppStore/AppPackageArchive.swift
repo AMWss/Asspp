@@ -56,7 +56,7 @@ class AppPackageArchive: ObservableObject {
         self.region = region
         self.package = package
 
-        let packageIdentifier = [package.id, package.software.bundleID.lowercased(), region]
+        let packageIdentifier = [package.id, package.software.bundleID.lowercased(), region, (package.entityType ?? .iPhone).rawValue]
             .joined()
             .lowercased()
         _versionItems = Persist(key: "\(packageIdentifier).versions", defaultValue: [:])
@@ -83,14 +83,14 @@ class AppPackageArchive: ObservableObject {
 
     func populateVersionIdentifiers(_ completion: (() async -> Void)? = nil) {
         guard let accountIdentifier, !loading else { return }
-        let bundleID = package.software.bundleID
+        let requestedPackage = package
         loading = true
         error = nil
 
         Task {
             do {
                 let versions = try await AppStore.this.withAccount(id: accountIdentifier) { userAccount in
-                    try await VersionFinder.list(account: &userAccount.account, bundleIdentifier: bundleID)
+                    try await StoreDownloadService.versions(account: &userAccount.account, package: requestedPackage)
                 }
                 self.versionIdentifiers = versions.reversed()
             } catch {
@@ -114,10 +114,10 @@ class AppPackageArchive: ObservableObject {
                 for _ in 0 ..< count where !self.isVersionItemsFullyLoaded {
                     let nextIdx = self.versionItems.count
                     let version = self.versionIdentifiers[nextIdx]
-                    let app = self.package.software
+                    let requestedPackage = self.package
 
                     let metadata = try await AppStore.this.withAccount(id: accountIdentifier) { userAccount in
-                        try await VersionLookup.getVersionMetadata(account: &userAccount.account, app: app, versionID: version)
+                        try await StoreDownloadService.versionMetadata(account: &userAccount.account, package: requestedPackage, versionID: version)
                     }
                     self.versionItems[version] = metadata
                 }
@@ -135,9 +135,9 @@ class AppPackageArchive: ObservableObject {
 
         Task {
             do {
-                let app = self.package.software
+                let requestedPackage = self.package
                 let metadata = try await AppStore.this.withAccount(id: accountIdentifier) { userAccount in
-                    try await VersionLookup.getVersionMetadata(account: &userAccount.account, app: app, versionID: versionID)
+                    try await StoreDownloadService.versionMetadata(account: &userAccount.account, package: requestedPackage, versionID: versionID)
                 }
                 self.versionItems[versionID] = metadata
             } catch {

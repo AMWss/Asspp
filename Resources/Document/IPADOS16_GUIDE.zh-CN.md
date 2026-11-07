@@ -5,7 +5,7 @@
 | 设备 | 构建来源 | 安装方式 |
 |---|---|---|
 | iPad / iPadOS **16.0** | 最新上游＋iOS 16 兼容补丁 | TrollStore（巨魔）安装 IPA |
-| iPhone 13 Pro / iOS **18** | 正常上游，不应用 iPad 补丁 | 配置分发签名后的 Safari OTA |
+| iPhone 13 Pro | 正常上游，不应用 iPad 补丁 | 配置分发签名后的 Safari OTA |
 
 ## 当前交付状态
 
@@ -62,9 +62,12 @@ iPad 已安装 TrollStore（巨魔），可以用它安装兼容 IPA，无需为
 | Secret | `IOS_PROVISIONING_PROFILE_BASE64` | 包含 iPhone 的分发描述文件 Base64 |
 | Variable | `IOS_BUNDLE_ID` | 描述文件对应的 Bundle ID |
 | Variable | `IOS_EXPORT_METHOD` | `release-testing`（现代 Xcode 的 Ad Hoc 导出名称） |
+| Variable | `IOS_ALLOW_PUBLIC_ADHOC` | 确认可公开签名 IPA 后填 `true` |
 | Variable | `IOS_OTA_BASE_URL` | 可选 HTTPS 自定义 Pages 根地址 |
 
 证书和密码只通过 GitHub Secrets 设置，不提交到仓库、不贴在聊天中。
+公开 Releases 中的已签名 IPA 内嵌描述文件，下载者可以查看其中登记的设备 UDID。
+用于此流程的描述文件只应包含要安装 Asspp 的设备。
 已有 macOS 签名材料可使用上游 `Resources/Scripts/generate.github.action.inputs.sh` 辅助配置。
 
 仓库必须公开；Settings → Pages → Source 选择 **GitHub Actions**。

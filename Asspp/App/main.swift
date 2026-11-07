@@ -20,7 +20,7 @@ let logger = {
     return logger
 }()
 
-APLogger.verbose = true
+APLogger.verbose = false
 APLogger.logger = Logger(label: "wiki.qaq.asspp.applepackage")
 
 let version = [
@@ -56,7 +56,9 @@ Task.detached(priority: .background) {
             let path = base.appendingPathComponent(file)
             if let content = try? FileManager.default.contentsOfDirectory(atPath: path.path),
                content.isEmpty
-            { try? FileManager.default.removeItem(at: path) }
+            {
+                try? FileManager.default.removeItem(at: path)
+            }
         }
     }
     _ = ProcessInfo.processInfo.hostName

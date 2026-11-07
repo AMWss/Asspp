@@ -25,10 +25,30 @@ struct AccountView: View {
     #if os(macOS)
         private var macOSBody: some View {
             NavigationStack(path: $navigationPath) {
-                accountsTable
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .navigationTitle("Accounts")
-                    .toolbar { macToolbar }
+                Group {
+                    if vm.accounts.isEmpty {
+                        ContentUnavailableView(
+                            label: {
+                                Label("No Accounts", systemImage: "person.crop.circle.badge.questionmark")
+                            },
+                            description: {
+                                Text("Add an Apple ID to start downloading IPA packages.")
+                            },
+                            actions: {
+                                Button("Add Account") { addAccount.toggle() }
+                            },
+                        )
+                        .padding()
+                    } else {
+                        accountsTable
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationDestination(for: AppStore.UserAccount.ID.self) { id in
+                    AccountDetailView(accountId: id)
+                }
+                .navigationTitle("Accounts")
+                .toolbar { macToolbar }
             }
             .sheet(isPresented: $addAccount) {
                 AddAccountView()
@@ -44,16 +64,17 @@ struct AccountView: View {
                         .redacted(reason: .placeholder, isEnabled: vm.demoMode)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .width(min: 240, ideal: 400, max: .infinity)
 
                 TableColumn("Region") { account in
                     Text(account.account.store)
                 }
-                .width(min: 40, ideal: 60, max: 80)
+                .width(min: 72, ideal: 88, max: 100)
 
                 TableColumn("Storefront") { account in
                     Text(ApplePackage.Configuration.countryCode(for: account.account.store) ?? String(localized: "Unknown"))
                 }
-                .width(min: 60, ideal: 80, max: 120)
+                .width(min: 56, ideal: 64, max: 80)
 
                 TableColumn("") { account in
                     Button {
@@ -72,26 +93,7 @@ struct AccountView: View {
                     }
                 }
             }
-            .navigationDestination(for: AppStore.UserAccount.ID.self) { id in
-                AccountDetailView(accountId: id)
-            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay {
-                if vm.accounts.isEmpty {
-                    CompatibleUnavailableView(
-                        label: {
-                            Label("No Accounts", systemImage: "person.crop.circle.badge.questionmark")
-                        },
-                        description: {
-                            Text("Add an Apple ID to start downloading IPA packages.")
-                        },
-                        actions: {
-                            Button("Add Account") { addAccount.toggle() }
-                        },
-                    )
-                    .padding()
-                }
-            }
         }
 
         private var footer: some View {

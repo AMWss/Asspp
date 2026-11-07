@@ -61,29 +61,56 @@ class AppStore: ObservableObject {
 
     static let this = AppStore()
 
+    static func normalizedDeviceIdentifier(_ value: String) -> String? {
+        let identifier = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ":", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .uppercased()
+        guard identifier.utf8.count == 12,
+              identifier.utf8.allSatisfy({ (48 ... 57).contains($0) || (65 ... 70).contains($0) }),
+              !["020000000000", "000000000000", "FFFFFFFFFFFF"].contains(identifier)
+        else { return nil }
+        return identifier
+    }
+
     private init() {
-        if deviceIdentifier.isEmpty {
-            do {
-                let systemIdentifier = try ApplePackage.DeviceIdentifier.system()
+        // Preserve identifiers used by existing accounts until the user edits them.
+        if deviceIdentifier.isEmpty || (accounts.isEmpty && Self.normalizedDeviceIdentifier(deviceIdentifier) == nil) {
+            if let systemIdentifier = (try? ApplePackage.DeviceIdentifier.system()).flatMap(Self.normalizedDeviceIdentifier) {
                 deviceIdentifier = systemIdentifier
                 logger.info("obtained system device identifier")
-            } catch {
-                logger.warning("failed to get system device identifier, falling back to random one: \(error)")
-                let randomIdentifier = ApplePackage.DeviceIdentifier.random()
+            } else {
+                logger.info("using a generated device identifier")
+                var randomIdentifier = ApplePackage.DeviceIdentifier.random()
+                while Self.normalizedDeviceIdentifier(randomIdentifier) == nil {
+                    randomIdentifier = ApplePackage.DeviceIdentifier.random()
+                }
                 deviceIdentifier = randomIdentifier
             }
         }
-        logger.info("using device identifier: \(deviceIdentifier)")
         ApplePackage.Configuration.deviceIdentifier = deviceIdentifier
     }
 
     @discardableResult
-    func save(email: String, account: ApplePackage.Account) -> UserAccount {
+    func save(email: String, account: ApplePackage.Account) throws -> UserAccount {
         logger.info("saving account for user")
         let account = UserAccount(account: account)
-        accounts = (accounts.filter { $0.account.email != email } + [account])
+        let updatedAccounts = (accounts.filter { $0.account.email != email } + [account])
             .sorted { $0.account.email < $1.account.email }
+        do {
+            try withMutation(keyPath: \.accounts) {
+                try _accounts.setAndSave(updatedAccounts)
+            }
+        } catch {
+            throw AccountStorageError()
+        }
         return account
+    }
+
+    private struct AccountStorageError: LocalizedError {
+        var errorDescription: String? {
+            String(localized: "Unable to save the account to Keychain. Check the app's code signing and Keychain access, then try again.")
+        }
     }
 
     func delete(id: UserAccount.ID) {

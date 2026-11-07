@@ -77,7 +77,7 @@ index 500ccf2..7c8adcc 100644
  
          private func updateProcessActivity(isDownloading: Bool) {
 diff --git a/Asspp/Backend/AppStore/AppPackageArchive.swift b/Asspp/Backend/AppStore/AppPackageArchive.swift
-index 8d6798b..aed6708 100644
+index 618130d..2dd07d6 100644
 --- a/Asspp/Backend/AppStore/AppPackageArchive.swift
 +++ b/Asspp/Backend/AppStore/AppPackageArchive.swift
 @@ -5,48 +5,40 @@
@@ -150,7 +150,7 @@ index 8d6798b..aed6708 100644
      init(accountID: String?, region: String, package: AppStore.AppPackage) {
          accountIdentifier = accountID
 diff --git a/Asspp/Backend/AppStore/AppStore.swift b/Asspp/Backend/AppStore/AppStore.swift
-index e8aca2f..202dee7 100644
+index 8473548..5c2051a 100644
 --- a/Asspp/Backend/AppStore/AppStore.swift
 +++ b/Asspp/Backend/AppStore/AppStore.swift
 @@ -5,13 +5,15 @@
@@ -227,7 +227,7 @@ index e8aca2f..202dee7 100644
      }
  
 diff --git a/Asspp/Backend/Downloader/Downloads.swift b/Asspp/Backend/Downloader/Downloads.swift
-index 9d0ce7b..657c26c 100644
+index 64a74b8..f390bba 100644
 --- a/Asspp/Backend/Downloader/Downloads.swift
 +++ b/Asspp/Backend/Downloader/Downloads.swift
 @@ -5,26 +5,23 @@
@@ -252,14 +252,17 @@ index 9d0ce7b..657c26c 100644
 -    @ObservationIgnored
      private var lastProgressUpdates: [UUID: CFAbsoluteTime] = [:]
  
-     // Manifest IDs whose Digger callbacks are already attached, so a
-     // pause/resume cycle does not register a second completion handler (which
-     // would run finalize() twice and destroy the downloaded bytes).
+-    /// Manifest IDs whose Digger callbacks are already attached, so a
+-    /// pause/resume cycle does not register a second completion handler (which
+-    /// would run finalize() twice and destroy the downloaded bytes).
 -    @ObservationIgnored
++    // Manifest IDs whose Digger callbacks are already attached, so a
++    // pause/resume cycle does not register a second completion handler (which
++    // would run finalize() twice and destroy the downloaded bytes).
      private var registeredCallbacks: Set<UUID> = []
  
      private static let speedFormatter: ByteCountFormatter = {
-@@ -36,13 +33,11 @@ class Downloads {
+@@ -36,24 +33,22 @@ class Downloads {
  
      var manifests: [PackageManifest] {
          get {
@@ -275,11 +278,15 @@ index 9d0ce7b..657c26c 100644
          }
      }
  
-@@ -50,10 +45,10 @@ class Downloads {
-     // `state`, so every download progress tick would invalidate the badge,
-     // sidebar, and AppDelegate observers and re-render the whole TabView.
-     // Refresh it only when a status actually transitions.
+-    /// Stored, not computed: a computed property would read each manifest's
+-    /// `state`, so every download progress tick would invalidate the badge,
+-    /// sidebar, and AppDelegate observers and re-render the whole TabView.
+-    /// Refresh it only when a status actually transitions.
 -    private(set) var runningTaskCount: Int = 0
++    // Stored, not computed: a computed property would read each manifest's
++    // `state`, so every download progress tick would invalidate the badge,
++    // sidebar, and AppDelegate observers and re-render the whole TabView.
++    // Refresh it only when a status actually transitions.
 +    @Published private(set) var runningTaskCount: Int = 0
  
      private func refreshRunningTaskCount() {
@@ -289,7 +296,7 @@ index 9d0ce7b..657c26c 100644
  
      private init() {
 diff --git a/Asspp/Backend/Downloader/PackageManifest.swift b/Asspp/Backend/Downloader/PackageManifest.swift
-index e16b18c..0944fdb 100644
+index cf3a9ac..ba1fb4f 100644
 --- a/Asspp/Backend/Downloader/PackageManifest.swift
 +++ b/Asspp/Backend/Downloader/PackageManifest.swift
 @@ -5,6 +5,7 @@
@@ -383,7 +390,7 @@ index cc69d34..2737c91 100644
  
      private var account: AppStore.UserAccount? {
 diff --git a/Asspp/Interface/Account/AccountView.swift b/Asspp/Interface/Account/AccountView.swift
-index bba6444..c7ac8f7 100644
+index 0530ef4..74ca207 100644
 --- a/Asspp/Interface/Account/AccountView.swift
 +++ b/Asspp/Interface/Account/AccountView.swift
 @@ -9,7 +9,7 @@ import ApplePackage
@@ -395,16 +402,7 @@ index bba6444..c7ac8f7 100644
      @State private var addAccount = false
      @State private var selectedID: AppStore.UserAccount.ID?
      @State private var navigationPath = NavigationPath()
-@@ -78,7 +78,7 @@ struct AccountView: View {
-             .frame(maxWidth: .infinity, maxHeight: .infinity)
-             .overlay {
-                 if vm.accounts.isEmpty {
--                    ContentUnavailableView(
-+                    CompatibleUnavailableView(
-                         label: {
-                             Label("No Accounts", systemImage: "person.crop.circle.badge.questionmark")
-                         },
-@@ -121,7 +121,7 @@ struct AccountView: View {
+@@ -123,7 +123,7 @@ struct AccountView: View {
              NavigationStack(path: $navigationPath) {
                  Group {
                      if vm.accounts.isEmpty {
@@ -414,7 +412,7 @@ index bba6444..c7ac8f7 100644
                                  Label("No Accounts", systemImage: "person.crop.circle.badge.questionmark")
                              },
 diff --git a/Asspp/Interface/Account/AddAccountView.swift b/Asspp/Interface/Account/AddAccountView.swift
-index 9bfdb14..56ad085 100644
+index 7a417ba..aec1fd8 100644
 --- a/Asspp/Interface/Account/AddAccountView.swift
 +++ b/Asspp/Interface/Account/AddAccountView.swift
 @@ -10,7 +10,7 @@ import ButtonKit
@@ -426,12 +424,16 @@ index 9bfdb14..56ad085 100644
      @Environment(\.dismiss) private var dismiss
  
      @State private var email: String = ""
-@@ -106,7 +106,7 @@ struct AddAccountView: View {
-             }
+@@ -120,9 +120,9 @@ struct AddAccountView: View {
          }
+         .disabled(isAuthenticating)
          .formStyle(.grouped)
 -        .animation(.spring, value: codeRequired)
+-        .onChange(of: email) { resetAuthentication() }
+-        .onChange(of: password) { resetAuthentication() }
 +        .animation(.spring(), value: codeRequired)
++        .onChange(of: email) { _ in resetAuthentication() }
++        .onChange(of: password) { _ in resetAuthentication() }
          #if os(iOS)
              .listStyle(.insetGrouped)
              .navigationBarTitleDisplayMode(.inline)
@@ -515,10 +517,10 @@ index cd0b656..05118bc 100644
              message = "Examining contents..."
              Task {
 diff --git a/Asspp/Interface/Download/FileListView.swift b/Asspp/Interface/Download/FileListView.swift
-index a82da62..a5c68f9 100644
+index c7fef76..e712321 100644
 --- a/Asspp/Interface/Download/FileListView.swift
 +++ b/Asspp/Interface/Download/FileListView.swift
-@@ -89,7 +89,7 @@ struct FileListView: View {
+@@ -91,7 +91,7 @@ struct FileListView: View {
          #else
              .searchable(text: $searchText)
          #endif
@@ -671,7 +673,7 @@ index c092b53..3945c06 100644
      var eligibleAccounts: [AppStore.UserAccount] {
          vm.eligibleAccounts(for: region)
 diff --git a/Asspp/Interface/Search/SearchView.swift b/Asspp/Interface/Search/SearchView.swift
-index 0f4bd4f..a6eff0f 100644
+index 89c0f5d..c82a93e 100644
 --- a/Asspp/Interface/Search/SearchView.swift
 +++ b/Asspp/Interface/Search/SearchView.swift
 @@ -5,6 +5,7 @@
@@ -682,7 +684,7 @@ index 0f4bd4f..a6eff0f 100644
  import ApplePackage
  import Kingfisher
  import SwiftUI
-@@ -14,10 +15,9 @@ import SwiftUI
+@@ -14,21 +15,18 @@ import SwiftUI
  /// clears it — so the one-shot survives the view being recreated when the user
  /// switches sidebar sections.
  @MainActor
@@ -691,11 +693,14 @@ index 0f4bd4f..a6eff0f 100644
 +final class SearchFieldFocus: ObservableObject {
      static let shared = SearchFieldFocus()
 -    var pending = false
+-    func requestFocus() {
+-        pending = true
+-    }
 +    @Published var pending = false
-     func requestFocus() { pending = true }
++    func requestFocus() { pending = true }
  }
  
-@@ -25,8 +25,8 @@ struct SearchView: View {
+ struct SearchView: View {
      @AppStorage("searchKey") var searchKey = ""
      @AppStorage("searchRegion") var searchRegion = "US"
      @FocusState var searchKeyFocused
@@ -706,7 +711,7 @@ index 0f4bd4f..a6eff0f 100644
  
      @State private var searching = false
      let regionKeys = Array(ApplePackage.Configuration.storeFrontValues.keys.sorted())
-@@ -40,7 +40,7 @@ struct SearchView: View {
+@@ -42,7 +40,7 @@ struct SearchView: View {
      #endif
  
      @State private var navigationPath = NavigationPath()
@@ -715,7 +720,7 @@ index 0f4bd4f..a6eff0f 100644
      @Environment(\.horizontalSizeClass) var horizontalSizeClass
      var possibleRegion: Set<String> {
          vm.possibleRegions
-@@ -70,7 +70,7 @@ struct SearchView: View {
+@@ -72,7 +70,7 @@ struct SearchView: View {
          } label: {
              Label("Type", systemImage: searchType.iconName)
          }
@@ -724,7 +729,7 @@ index 0f4bd4f..a6eff0f 100644
              searchResult = []
          }
      }
-@@ -105,7 +105,7 @@ struct SearchView: View {
+@@ -106,7 +104,7 @@ struct SearchView: View {
          } label: {
              Label(searchRegion, systemImage: "globe")
          }
@@ -733,7 +738,7 @@ index 0f4bd4f..a6eff0f 100644
              searchResult = []
          }
      }
-@@ -150,16 +150,16 @@ struct SearchView: View {
+@@ -151,19 +149,17 @@ struct SearchView: View {
              }
          }
          .formStyle(.grouped)
@@ -749,11 +754,15 @@ index 0f4bd4f..a6eff0f 100644
 +        .animation(.spring(), value: searchResult)
          .onAppear { consumePendingFocus() }
 -        .onChange(of: searchFocus.pending) { _, isPending in
+-            if isPending {
+-                consumePendingFocus()
+-            }
 +        .onChange(of: searchFocus.pending) { isPending in
-             if isPending { consumePendingFocus() }
++            if isPending { consumePendingFocus() }
          }
      }
-@@ -274,8 +274,8 @@ extension SearchView {
+ 
+@@ -279,8 +275,8 @@ extension SearchView {
                          .padding([.bottom, .horizontal])
                      }
                  }
@@ -778,7 +787,7 @@ index 2eb6263..e408896 100644
      }
  }
 diff --git a/Asspp/Interface/Setting/SettingView.swift b/Asspp/Interface/Setting/SettingView.swift
-index 5541496..d186ebe 100644
+index c1b9791..78c2cef 100644
 --- a/Asspp/Interface/Setting/SettingView.swift
 +++ b/Asspp/Interface/Setting/SettingView.swift
 @@ -14,7 +14,7 @@ import SwiftUI
@@ -788,8 +797,8 @@ index 5541496..d186ebe 100644
 -    @State private var vm = AppStore.this
 +    @ObservedObject private var vm = AppStore.this
  
-     @State private var deviceIdTapCount = 0
      @State private var showDeviceIdWarning = false
+     @State private var editingDeviceId = false
 diff --git a/Asspp/Interface/Utils/ViewBackports.swift b/Asspp/Interface/Utils/ViewBackports.swift
 index fab7584..0958732 100644
 --- a/Asspp/Interface/Utils/ViewBackports.swift

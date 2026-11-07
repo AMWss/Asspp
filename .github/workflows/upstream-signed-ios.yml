@@ -34,8 +34,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FORCE_BUILD: ${{ inputs.force_build || false }}
+          ALLOW_PUBLIC_ADHOC: ${{ vars.IOS_ALLOW_PUBLIC_ADHOC }}
         run: |
           set -euo pipefail
+          if [ "$ALLOW_PUBLIC_ADHOC" != true ]; then
+            echo '::error::Set IOS_ALLOW_PUBLIC_ADHOC=true to publish an IPA whose embedded profile exposes its registered device identifiers.'
+            exit 1
+          fi
           # Public Releases are required: iOS cannot authenticate to a private IPA URL.
           test "$(gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility)" = public || {
             echo '::error::Use a public fork for this GitHub Releases OTA workflow.'; exit 1;
@@ -93,6 +98,9 @@ jobs:
       - name: Select Xcode
         run: bash compatibility/Resources/Scripts/ios16/select_xcode.sh
 
+      - name: Ensure iOS SDK is available
+        run: xcrun --sdk iphoneos --show-sdk-path || xcodebuild -downloadPlatform iOS
+
       - name: Check packaging helpers
         run: python3 -m unittest discover -s compatibility/Resources/Scripts/ios16/tests -v
 
@@ -145,13 +153,14 @@ jobs:
           PROFILE_TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print TeamIdentifier:0" "${PROFILE_PLIST}")
           PROFILE_APP_IDENTIFIER=$(/usr/libexec/PlistBuddy -c "Print Entitlements:application-identifier" "${PROFILE_PLIST}" 2>/dev/null || true)
 
-          mkdir -p "${HOME}/Library/MobileDevice/Provisioning Profiles"
-          cp "${PROFILE_PATH}" "${HOME}/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
+          PROFILE_DIR="${HOME}/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          mkdir -p "${PROFILE_DIR}"
+          cp "${PROFILE_PATH}" "${PROFILE_DIR}/${PROFILE_UUID}.mobileprovision"
 
           DEFAULT_BUNDLE_ID=$(awk -F '=' '/^PRODUCT_BUNDLE_IDENTIFIER/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' source/Configuration/Base.xcconfig)
           BUNDLE_ID="${BUNDLE_ID_OVERRIDE:-${DEFAULT_BUNDLE_ID}}"
           TEAM_ID="${TEAM_ID_OVERRIDE:-${PROFILE_TEAM_ID}}"
-          EXPORT_METHOD="${EXPORT_METHOD_OVERRIDE:-ad-hoc}"
+          EXPORT_METHOD="${EXPORT_METHOD_OVERRIDE:-release-testing}"
 
           PROFILE_BUNDLE_ID=""
           if [ -n "${PROFILE_APP_IDENTIFIER}" ]; then

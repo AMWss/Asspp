@@ -98,9 +98,8 @@ struct SearchView: View {
             } else {
                 buildPickView(
                     for: regionKeys,
-                ) {
-                }
-                .pickerStyle(.inline)
+                ) {}
+                    .pickerStyle(.inline)
             }
         } label: {
             Label(searchRegion, systemImage: "globe")
@@ -190,24 +189,26 @@ struct SearchView: View {
         searching = true
         searchError = nil
         logger.info("search: term=\(searchKey) region=\(searchRegion) type=\(searchType.rawValue)")
+        let entityType = searchType
         Task {
             do {
                 var result = try await ApplePackage.Searcher.search(
                     term: searchKey,
                     countryCode: searchRegion,
                     limit: 32,
-                    entityType: searchType,
+                    entityType: entityType,
                 )
                 if let app = try? await ApplePackage.Lookup.lookup(
                     bundleID: searchKey,
                     countryCode: searchRegion,
+                    entityType: entityType,
                 ) {
                     result.insert(app, at: 0)
                 }
                 logger.info("search completed: \(result.count) results for term=\(searchKey)")
                 await MainActor.run {
                     searching = false
-                    searchResult = result.map { AppStore.AppPackage(software: $0) }
+                    searchResult = result.map { AppStore.AppPackage(software: $0, entityType: entityType) }
                     searchError = nil
                 }
             } catch {
@@ -231,9 +232,9 @@ extension SearchView {
     var legacyContent: some View {
         content
             .searchable(text: $searchKey, prompt: "Keyword") {}
-            #if os(macOS)
-                .searchFocused($searchKeyFocused)
-            #endif
+        #if os(macOS)
+            .searchFocused($searchKeyFocused)
+        #endif
             .onSubmit(of: .search) { search() }
             .navigationTitle("Search - \(searchRegion.uppercased())")
             .toolbar { tools }
