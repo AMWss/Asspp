@@ -11,6 +11,10 @@ on:
           - Send verification code
           - Request new code
         default: Sign IPA
+      build_from_source:
+        description: Build current main source before signing (disable to sign upstream release IPA)
+        type: boolean
+        default: true
       target_run_id:
         description: Waiting run ID (usually leave empty)
         type: string
@@ -27,6 +31,7 @@ jobs:
     uses: AMWss/Asspp/.github/workflows/free-sign-engine.yml@self-sign
     with:
       operation: ${{ inputs.operation }}
+      build_from_source: ${{ inputs.build_from_source }}
       target_run_id: ${{ inputs.target_run_id }}
     secrets:
       APPLE_ID: ${{ secrets.APPLE_ID }}
