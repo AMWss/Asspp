@@ -27,6 +27,7 @@
 7. 成功后，在原签名任务的 **Artifacts** 下载 `Asspp-signed`，解压得到 `Asspp-signed.ipa`。
 
 验证码通过等待任务的一次性公钥加密传递。不要把验证码填进普通 workflow inputs。
+如未收到验证码或需要重新发送，在签名任务等待期间另开一次运行，Operation 选择 **Request new code**。等待任务收到指令后会向 Apple 请求新验证码。收到新码后更新 Secret，再运行 **Send verification code**。
 如果同时有多个等待任务，在 Target run ID 填原任务地址中 `/runs/` 后面的数字。
 
 ## 后续运行

@@ -173,7 +173,12 @@ def wait_code():
                 message = json.loads(private.decrypt(packet, padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None)))
             except (ValueError, json.JSONDecodeError):
                 continue
-            if message.get("request_id") == request["id"] and re.fullmatch(r"[0-9]{6}", message.get("code", "")):
+            if message.get("request_id") != request["id"]:
+                continue
+            if message.get("action") == "resend":
+                sys.stdout.write("RESEND")
+                return
+            if re.fullmatch(r"[0-9]{6}", message.get("code", "")):
                 sys.stdout.write(message["code"])
                 return
         time.sleep(8)
@@ -181,8 +186,9 @@ def wait_code():
 
 
 def deliver():
+    resend = os.environ.get("MESSAGE_KIND") == "Request new code"
     code = os.environ.get("APPLE_2FA_CODE", "").strip()
-    if not re.fullmatch(r"[0-9]{6}", code):
+    if not resend and not re.fullmatch(r"[0-9]{6}", code):
         raise ValueError("Set APPLE_2FA_CODE to the six-digit Apple verification code")
     target = os.environ.get("TARGET_RUN_ID", "").strip()
     if target and not target.isdigit():
@@ -204,11 +210,16 @@ def deliver():
         raise ValueError("Multiple sign-in runs are active. Fill in the target run ID.")
     request = json.loads(artifact_file(max(candidates, key=lambda a: a["id"]), "request.json"))
     public = serialization.load_pem_public_key(request["public_key"].encode())
-    message = json.dumps({"request_id": request["id"], "code": code}).encode()
+    payload = {"request_id": request["id"]}
+    if resend:
+        payload["action"] = "resend"
+    else:
+        payload["code"] = code
+    message = json.dumps(payload).encode()
     encrypted = public.encrypt(message, padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
     Path(os.environ["CODE_ARCHIVE"]).write_bytes(encrypted)
     output("target_run_id", request["run_id"])
-    print("Verification code encrypted for the waiting signing run.")
+    print("Encrypted message prepared for the waiting signing run.")
 
 
 def download():

@@ -90,6 +90,21 @@ class SigningTransportTests(unittest.TestCase):
                     actions.restore()
             self.assertEqual((root / "state" / "key").read_text(), "existing")
 
+    def test_request_new_code_requires_no_code_secret(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            environment = {"SIGNING_MAILBOX_DIR": str(root), "GITHUB_RUN_ID": "123", "CODE_ARCHIVE": str(root / "code.enc"), "GITHUB_OUTPUT": str(root / "output"), "APPLE_2FA_CODE": "", "TARGET_RUN_ID": "", "MESSAGE_KIND": "Request new code"}
+            request_artifact = {"id": 1, "name": "free-sign-request-123-1", "workflow_run": {"id": 123}}
+            code_artifact = {"id": 2, "name": "free-sign-code-123", "workflow_run": {"id": 124}}
+            with patch.dict(os.environ, environment):
+                actions.initialize()
+                with patch.object(actions, "api", return_value={"workflow_runs": [{"id": 123, "run_attempt": 1}]}), patch.object(actions, "artifacts", return_value=[request_artifact]), patch.object(actions, "artifact_file", return_value=(root / "request.json").read_bytes()):
+                    actions.deliver()
+                packet = (root / "code.enc").read_bytes()
+                with patch.object(actions, "artifacts", return_value=[code_artifact]), patch.object(actions, "artifact_file", return_value=packet), patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                    actions.wait_code()
+                self.assertEqual(stdout.getvalue(), "RESEND")
+
 
 if __name__ == "__main__":
     unittest.main()

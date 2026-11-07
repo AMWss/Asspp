@@ -137,7 +137,7 @@ jobs:
         run: rm -rf "$SIGNING_STATE_DIR" "$SIGNING_MAILBOX_DIR"
 
   verification-code:
-    if: inputs.operation == 'Send verification code'
+    if: inputs.operation == 'Send verification code' || inputs.operation == 'Request new code'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -158,6 +158,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
           TARGET_RUN_ID: ${{ inputs.target_run_id }}
+          MESSAGE_KIND: ${{ inputs.operation }}
         run: python3 Tools/FreeSign/actions.py deliver
       - name: Deliver encrypted code
         uses: actions/upload-artifact@v4

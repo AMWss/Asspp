@@ -60,6 +60,10 @@ async fn run() -> Result<(), Report> {
                     bail!("Verification code timed out or could not be retrieved");
                 }
                 let code = String::from_utf8(response.stdout)?.trim().to_string();
+                if code == "RESEND" {
+                    println!("::notice::Requesting a new verification code from Apple.");
+                    return Ok(TwoFactorCallbackResponse::ResendCode);
+                }
                 if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
                     bail!("Invalid verification code response");
                 }

@@ -9,6 +9,7 @@ on:
         options:
           - Sign IPA
           - Send verification code
+          - Request new code
         default: Sign IPA
       target_run_id:
         description: Waiting run ID (usually leave empty)
