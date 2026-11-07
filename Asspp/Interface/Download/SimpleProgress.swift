@@ -15,7 +15,7 @@ struct SimpleProgress: View {
             .overlay {
                 GeometryReader { r in
                     Rectangle()
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(.accent)
                         .frame(width: progress * r.size.width)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

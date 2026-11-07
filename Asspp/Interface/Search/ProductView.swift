@@ -11,7 +11,7 @@ import Kingfisher
 import SwiftUI
 
 struct ProductView: View {
-    @StateObject private var archive: AppPackageArchive
+    @State private var archive: AppPackageArchive
     @Binding var navigationPath: NavigationPath
 
     var region: String {
@@ -19,12 +19,12 @@ struct ProductView: View {
     }
 
     init(archive: AppStore.AppPackage, region: String, navigationPath: Binding<NavigationPath>) {
-        _archive = StateObject(wrappedValue: AppPackageArchive(accountID: nil, region: region, package: archive))
+        _archive = State(initialValue: AppPackageArchive(accountID: nil, region: region, package: archive))
         _navigationPath = navigationPath
     }
 
-    @ObservedObject private var vm = AppStore.this
-    @ObservedObject private var dvm = Downloads.this
+    @State private var vm = AppStore.this
+    @State private var dvm = Downloads.this
 
     var eligibleAccounts: [AppStore.UserAccount] {
         vm.eligibleAccounts(for: region)

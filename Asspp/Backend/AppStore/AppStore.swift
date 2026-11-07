@@ -5,15 +5,13 @@
 //  Created by 秋星桥 on 2024/7/11.
 //
 
-import Combine
 import ApplePackage
 import Foundation
 
+@Observable
 @MainActor
-class AppStore: ObservableObject {
-    // This model only has computed persisted properties, so keep one publisher.
-    let objectWillChange = ObservableObjectPublisher()
-
+class AppStore {
+    @ObservationIgnored
     private var _accounts = Persist<[UserAccount]>(
         key: "Accounts",
         defaultValue: [],
@@ -22,14 +20,17 @@ class AppStore: ObservableObject {
 
     var accounts: [UserAccount] {
         get {
+            access(keyPath: \.accounts)
             return _accounts.wrappedValue
         }
         set {
-            objectWillChange.send()
-            _accounts.wrappedValue = newValue
+            withMutation(keyPath: \.accounts) {
+                _accounts.wrappedValue = newValue
+            }
         }
     }
 
+    @ObservationIgnored
     private var _deviceIdentifier = Persist<String>(
         key: "DeviceIdentifier",
         defaultValue: "",
@@ -38,24 +39,29 @@ class AppStore: ObservableObject {
 
     var deviceIdentifier: String {
         get {
+            access(keyPath: \.deviceIdentifier)
             return _deviceIdentifier.wrappedValue
         }
         set {
-            objectWillChange.send()
-            _deviceIdentifier.wrappedValue = newValue
+            withMutation(keyPath: \.deviceIdentifier) {
+                _deviceIdentifier.wrappedValue = newValue
+            }
             ApplePackage.Configuration.deviceIdentifier = newValue
         }
     }
 
+    @ObservationIgnored
     private var _demoMode = Persist<Bool>(key: "DemoMode", defaultValue: false)
 
     var demoMode: Bool {
         get {
+            access(keyPath: \.demoMode)
             return _demoMode.wrappedValue
         }
         set {
-            objectWillChange.send()
-            _demoMode.wrappedValue = newValue
+            withMutation(keyPath: \.demoMode) {
+                _demoMode.wrappedValue = newValue
+            }
         }
     }
 

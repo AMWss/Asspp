@@ -9,7 +9,7 @@ import ApplePackage
 import SwiftUI
 
 struct ProductHistoryView: View {
-    @ObservedObject var vm: AppPackageArchive
+    @State var vm: AppPackageArchive
     @State private var showErrorAlert = false
     @Environment(\.dismiss) var dismiss
 
@@ -30,7 +30,7 @@ struct ProductHistoryView: View {
                     } label: {
                         HStack {
                             Text(pkg.software.version)
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(.accent)
                             Spacer()
                         }
                         .contentShape(Rectangle())
@@ -110,7 +110,7 @@ struct ProductHistoryView: View {
         } message: {
             Text(vm.error ?? String(localized: "Unknown Error"))
         }
-        .onChange(of: vm.error) { newValue in
+        .onChange(of: vm.error) { _, newValue in
             showErrorAlert = newValue != nil
         }
         .onAppear {
@@ -123,7 +123,7 @@ struct ProductHistoryView: View {
 
     private var toolbarPlacement: ToolbarItemPlacement {
         #if os(iOS)
-            .navigationBarTrailing
+            .topBarTrailing
         #else
             .automatic
         #endif

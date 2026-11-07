@@ -15,7 +15,7 @@ import SwiftUI
 #endif
 
 struct PackageView: View {
-    @ObservedObject var pkg: PackageManifest
+    @State var pkg: PackageManifest
 
     var archive: AppStore.AppPackage {
         pkg.package
@@ -34,8 +34,8 @@ struct PackageView: View {
         @State private var copied = false
     #endif
 
-    @ObservedObject private var vm = AppStore.this
-    @ObservedObject private var downloads = Downloads.this
+    @State private var vm = AppStore.this
+    @State private var downloads = Downloads.this
 
     var body: some View {
         Form {

@@ -1,0 +1,61 @@
+name: Sync upstream main
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'AMWss/Asspp' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+      - name: Mirror upstream source and retain fork workflows
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/Lakr233/Asspp.git refs/heads/main
+          upstream=$(git rev-parse FETCH_HEAD)
+          if git merge-base --is-ancestor "$upstream" HEAD; then
+            echo "Already synced to $upstream" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          overlays=(
+            .github/workflows/sync-upstream.yml
+            .github/workflows/ios16-check.yml
+            .github/workflows/upstream-signed-ios.yml
+          )
+          exclusions=()
+          for path in "${overlays[@]}"; do
+            exclusions+=(":(exclude)$path")
+          done
+          base=$(git merge-base HEAD "$upstream")
+          if ! git diff --quiet "$base" HEAD -- . "${exclusions[@]}"; then
+            echo "::error::main contains fork changes outside the allowed workflows, or upstream history was rewritten."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge -s ours --no-commit --no-ff "$upstream"
+          git read-tree --reset -u "$upstream"
+          git restore --source=HEAD --staged --worktree -- "${overlays[@]}"
+          git diff --cached --quiet "$upstream" -- . "${exclusions[@]}"
+          git commit -m "Sync upstream Asspp ${upstream:0:12}"
+          if ! git push origin HEAD:refs/heads/main; then
+            echo "::error::Push rejected. Check whether main moved or GitHub requires Workflows write access for the upstream changes."
+            exit 1
+          fi
+          echo "Synced upstream $upstream" >> "$GITHUB_STEP_SUMMARY"

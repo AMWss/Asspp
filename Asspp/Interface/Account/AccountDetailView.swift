@@ -12,7 +12,7 @@ import SwiftUI
 struct AccountDetailView: View {
     let accountId: AppStore.UserAccount.ID
 
-    @ObservedObject private var vm = AppStore.this
+    @State private var vm = AppStore.this
     @Environment(\.dismiss) var dismiss
 
     private var account: AppStore.UserAccount? {

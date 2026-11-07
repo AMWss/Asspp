@@ -5,40 +5,48 @@
 //  Created by luca on 15.09.2025.
 //
 
-import Combine
 import ApplePackage
 import Foundation
 import OrderedCollections
 
 @MainActor
-class AppPackageArchive: ObservableObject {
+@Observable
+class AppPackageArchive {
+    @ObservationIgnored
     let accountIdentifier: String?
+    @ObservationIgnored
     let region: String
 
-    @Published var package: AppStore.AppPackage
+    var package: AppStore.AppPackage
 
     typealias VersionIdentifier = String
+    @ObservationIgnored
     private var _versionIdentifiers: Persist<[VersionIdentifier]>
 
     var versionIdentifiers: [VersionIdentifier] {
         get {
+            access(keyPath: \.versionIdentifiers)
             return _versionIdentifiers.wrappedValue
         }
         set {
-            objectWillChange.send()
-            _versionIdentifiers.wrappedValue = newValue
+            withMutation(keyPath: \.versionIdentifiers) {
+                _versionIdentifiers.wrappedValue = newValue
+            }
         }
     }
 
+    @ObservationIgnored
     private var _versionItems: Persist<OrderedDictionary<VersionIdentifier, VersionMetadata>>
 
     var versionItems: OrderedDictionary<VersionIdentifier, VersionMetadata> {
         get {
+            access(keyPath: \.versionItems)
             return _versionItems.wrappedValue
         }
         set {
-            objectWillChange.send()
-            _versionItems.wrappedValue = newValue
+            withMutation(keyPath: \.versionItems) {
+                _versionItems.wrappedValue = newValue
+            }
         }
     }
 
@@ -47,9 +55,9 @@ class AppPackageArchive: ObservableObject {
         return versionItems.count == versionIdentifiers.count
     }
 
-    @Published var error: String?
-    @Published var loading = false
-    @Published var shouldDismiss = false
+    var error: String?
+    var loading = false
+    var shouldDismiss = false
 
     init(accountID: String?, region: String, package: AppStore.AppPackage) {
         accountIdentifier = accountID

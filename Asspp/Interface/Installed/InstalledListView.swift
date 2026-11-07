@@ -67,7 +67,7 @@
     }
 
     private struct AppRow: View {
-        @ObservedObject var vm = AppStore.this
+        @State var vm = AppStore.this
         var preferredIconSize: CGFloat? {
             50
         }

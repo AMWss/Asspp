@@ -9,7 +9,7 @@ import ApplePackage
 import SwiftUI
 
 struct AccountView: View {
-    @ObservedObject private var vm = AppStore.this
+    @State private var vm = AppStore.this
     @State private var addAccount = false
     @State private var selectedID: AppStore.UserAccount.ID?
     @State private var navigationPath = NavigationPath()
@@ -123,7 +123,7 @@ struct AccountView: View {
             NavigationStack(path: $navigationPath) {
                 Group {
                     if vm.accounts.isEmpty {
-                        CompatibleUnavailableView(
+                        ContentUnavailableView(
                             label: {
                                 Label("No Accounts", systemImage: "person.crop.circle.badge.questionmark")
                             },

@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct DownloadView: View {
-    @ObservedObject private var vm = Downloads.this
+    @State private var vm = Downloads.this
 
     var body: some View {
         NavigationStack {
@@ -20,7 +20,7 @@ struct DownloadView: View {
     private var content: some View {
         Group {
             if vm.manifests.isEmpty {
-                CompatibleUnavailableView(
+                ContentUnavailableView(
                     label: {
                         Label("No Downloads", systemImage: "arrow.down.circle")
                     },
@@ -59,15 +59,15 @@ struct DownloadView: View {
 }
 
 private struct PackageManifestRow: View {
-    @ObservedObject var manifest: PackageManifest
-    @ObservedObject private var vm = Downloads.this
+    let manifest: PackageManifest
+    @State private var vm = Downloads.this
 
     var body: some View {
         NavigationLink(value: manifest) {
             VStack(spacing: 8) {
                 ArchivePreviewView(archive: manifest.package)
                 SimpleProgress(progress: manifest.state.percent)
-                    .animation(.interactiveSpring(), value: manifest.state.percent)
+                    .animation(.interactiveSpring, value: manifest.state.percent)
                 HStack {
                     Text(manifest.hint)
                     Spacer()

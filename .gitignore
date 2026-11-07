@@ -129,7 +129,3 @@ Configuration/Developer.xcconfig
 References/
 
 Foundation/ApplePackage/
-
-# Python packaging/check helpers
-__pycache__/
-*.pyc

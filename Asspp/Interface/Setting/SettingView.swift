@@ -14,7 +14,7 @@ import SwiftUI
 
 struct SettingView: View {
     @Environment(\.openURL) private var openURL
-    @ObservedObject private var vm = AppStore.this
+    @State private var vm = AppStore.this
 
     @State private var showDeviceIdWarning = false
     @State private var editingDeviceId = false

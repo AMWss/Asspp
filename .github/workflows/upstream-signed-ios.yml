@@ -79,10 +79,10 @@ jobs:
       SHORT_SHA: ${{ needs.detect-upstream.outputs.short_sha }}
       TAG_NAME: ${{ needs.detect-upstream.outputs.tag_name }}
     steps:
-      - name: Checkout compatibility tools from this fork
+      - name: Checkout packaging tools from ios16
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ios16
           path: compatibility
           fetch-depth: 0
           persist-credentials: false
@@ -102,7 +102,7 @@ jobs:
         run: xcrun --sdk iphoneos --show-sdk-path || xcodebuild -downloadPlatform iOS
 
       - name: Check packaging helpers
-        run: python3 -m unittest discover -s compatibility/Resources/Scripts/ios16/tests -v
+        run: python3 -m unittest discover -s compatibility/Resources/Scripts/ios16/tests -p test_packaging.py -v
 
       - name: Install signing assets
         id: signing

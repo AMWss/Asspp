@@ -5,7 +5,6 @@
 //  Created by 秋星桥 on 2024/7/10.
 //
 
-import Combine
 import ApplePackage
 import Logging
 #if canImport(UIKit)
@@ -13,11 +12,12 @@ import Logging
 #endif
 import Vapor
 
-class Installer: ObservableObject, Identifiable, @unchecked Sendable {
-    let id: UUID
-    let app: Application
-    let archive: AppStore.AppPackage
-    let port = Int.random(in: 4000 ... 8000)
+@Observable
+class Installer: Identifiable, @unchecked Sendable {
+    @ObservationIgnored let id: UUID
+    @ObservationIgnored let app: Application
+    @ObservationIgnored let archive: AppStore.AppPackage
+    @ObservationIgnored let port = Int.random(in: 4000 ... 8000)
 
     enum Status {
         case ready
@@ -28,7 +28,7 @@ class Installer: ObservableObject, Identifiable, @unchecked Sendable {
     }
 
     @MainActor
-    @Published var status: Status = .ready
+    var status: Status = .ready
 
     init(archive: AppStore.AppPackage, path packagePath: URL) async throws {
         let id: UUID = .init()

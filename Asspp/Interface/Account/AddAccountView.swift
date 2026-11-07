@@ -10,7 +10,7 @@ import ButtonKit
 import SwiftUI
 
 struct AddAccountView: View {
-    @ObservedObject private var vm = AppStore.this
+    @State private var vm = AppStore.this
     @Environment(\.dismiss) private var dismiss
 
     @State private var email: String = ""
@@ -120,9 +120,9 @@ struct AddAccountView: View {
         }
         .disabled(isAuthenticating)
         .formStyle(.grouped)
-        .animation(.spring(), value: codeRequired)
-        .onChange(of: email) { _ in resetAuthentication() }
-        .onChange(of: password) { _ in resetAuthentication() }
+        .animation(.spring, value: codeRequired)
+        .onChange(of: email) { resetAuthentication() }
+        .onChange(of: password) { resetAuthentication() }
         #if os(iOS)
             .listStyle(.insetGrouped)
             .navigationBarTitleDisplayMode(.inline)

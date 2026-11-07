@@ -1,13 +1,5 @@
 # Asspp
 
-## iPadOS 16 / iPhone OTA 定制版本
-
-- iPadOS 16.0：兼容上游的 iPad 专版，供 TrollStore（巨魔）安装。
-- iPhone iOS 18：正常上游版本，另配分发签名后通过 Safari OTA 安装更新。
-
-参见 [中文配置与验证说明](Resources/Document/IPADOS16_GUIDE.zh-CN.md)。
-iPad 版已通过 Xcode 编译和包检查，登录及下载仍待实机验证；iPhone OTA 还需配置分发签名。
-
 **The Ultimate Multi-Region App Store Manager.**
 
 Asspp is a powerful client designed for users who need to manage **multiple Apple IDs** across **different countries and regions**. Switch stores instantly, download apps from anywhere, and manage your IPA library—all without logging out of your device.

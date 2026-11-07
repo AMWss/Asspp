@@ -5,7 +5,6 @@
 //  Created by 秋星桥 on 2024/7/11.
 //
 
-import Combine
 import ApplePackage
 import Kingfisher
 import SwiftUI
@@ -15,18 +14,21 @@ import SwiftUI
 /// clears it — so the one-shot survives the view being recreated when the user
 /// switches sidebar sections.
 @MainActor
-final class SearchFieldFocus: ObservableObject {
+@Observable
+final class SearchFieldFocus {
     static let shared = SearchFieldFocus()
-    @Published var pending = false
-    func requestFocus() { pending = true }
+    var pending = false
+    func requestFocus() {
+        pending = true
+    }
 }
 
 struct SearchView: View {
     @AppStorage("searchKey") var searchKey = ""
     @AppStorage("searchRegion") var searchRegion = "US"
     @FocusState var searchKeyFocused
-    @ObservedObject private var searchFocus = SearchFieldFocus.shared
-    @State private var searchType = EntityType.iPad
+    @State private var searchFocus = SearchFieldFocus.shared
+    @State private var searchType = EntityType.iPhone
 
     @State private var searching = false
     let regionKeys = Array(ApplePackage.Configuration.storeFrontValues.keys.sorted())
@@ -40,7 +42,7 @@ struct SearchView: View {
     #endif
 
     @State private var navigationPath = NavigationPath()
-    @ObservedObject private var vm = AppStore.this
+    @State private var vm = AppStore.this
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     var possibleRegion: Set<String> {
         vm.possibleRegions
@@ -70,7 +72,7 @@ struct SearchView: View {
         } label: {
             Label("Type", systemImage: searchType.iconName)
         }
-        .onChange(of: searchType) { _ in
+        .onChange(of: searchType) { _, _ in
             searchResult = []
         }
     }
@@ -104,7 +106,7 @@ struct SearchView: View {
         } label: {
             Label(searchRegion, systemImage: "globe")
         }
-        .onChange(of: searchRegion) { _ in
+        .onChange(of: searchRegion) { _, _ in
             searchResult = []
         }
     }
@@ -149,17 +151,19 @@ struct SearchView: View {
             }
         }
         .formStyle(.grouped)
-        .animation(.spring(), value: searchError)
+        .animation(.spring, value: searchError)
         .navigationDestination(for: ProductDestination.self) { dest in
             ProductView(archive: dest.archive, region: dest.region, navigationPath: $navigationPath)
         }
         .navigationDestination(for: PackageManifest.self) { manifest in
             PackageView(pkg: manifest)
         }
-        .animation(.spring(), value: searchResult)
+        .animation(.spring, value: searchResult)
         .onAppear { consumePendingFocus() }
-        .onChange(of: searchFocus.pending) { isPending in
-            if isPending { consumePendingFocus() }
+        .onChange(of: searchFocus.pending) { _, isPending in
+            if isPending {
+                consumePendingFocus()
+            }
         }
     }
 
@@ -275,8 +279,8 @@ extension SearchView {
                         .padding([.bottom, .horizontal])
                     }
                 }
-                .animation(.spring(), value: searchResult)
-                .animation(.spring(), value: searching)
+                .animation(.spring, value: searchResult)
+                .animation(.spring, value: searching)
         }
 
         var navigationBarVisibility: Visibility {
