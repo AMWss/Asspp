@@ -17,6 +17,37 @@ spec.loader.exec_module(actions)
 
 
 class SigningTransportTests(unittest.TestCase):
+    def test_sidestore_download_chooses_only_official_nightly_ipa(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'input.ipa'
+            payload = b'PK-test-sidestore'
+            release = {'tag_name': 'nightly', 'assets': [
+                {'name': 'build-logs.zip'},
+                {'name': 'SideStore.ipa', 'browser_download_url': 'https://github.com/SideStore/SideStore/releases/download/nightly/SideStore.ipa', 'digest': 'sha256:' + actions.hashlib.sha256(payload).hexdigest()}]}
+            with patch.dict(os.environ, {'SIGNING_APPLICATION': 'SideStore', 'INPUT_IPA': str(path), 'GITHUB_OUTPUT': str(Path(directory) / 'output')}), patch.object(actions, 'fetch', side_effect=[json.dumps(release).encode(), payload]) as fetch:
+                actions.download()
+            self.assertEqual(path.read_bytes(), payload)
+            self.assertEqual(fetch.call_args_list[0].args[0], 'https://api.github.com/repos/SideStore/SideStore/releases/tags/nightly')
+
+    def test_sidestore_private_package_browser_crypto_compatibility(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / 'SideStore.ipa'
+            raw.write_bytes(b'PK-private-signing-identity-test')
+            target = root / 'protected'
+            password = 'local-test-password-over-20-characters'
+            with patch.dict(os.environ, {'SIGNED_IPA': str(raw), 'PROTECTED_PACKAGE_DIR': str(target), 'SIGNING_STATE_PASSWORD': password}):
+                actions.protect_package()
+            encrypted = (target / 'SideStore-signed.ipa.enc').read_bytes()
+            self.assertNotIn(b'private-signing-identity', encrypted)
+            self.assertEqual(sorted(p.name for p in target.iterdir()), ['README.txt', 'SideStore-signed.ipa.enc', 'decrypt-package.html'])
+            script = """const fs=require('fs'); const b=fs.readFileSync(process.argv[1]); (async()=>{const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(process.argv[2]),'PBKDF2',false,['deriveKey']); const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b.subarray(5,21),iterations:600000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['decrypt']);const out=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.subarray(21,33),additionalData:b.subarray(0,33)},key,b.subarray(33));process.stdout.write(Buffer.from(out));})().catch(()=>process.exit(2));"""
+            result = subprocess.run(['node', '-e', script, str(target / 'SideStore-signed.ipa.enc'), password], capture_output=True, check=True)
+            self.assertEqual(result.stdout, raw.read_bytes())
+            result = subprocess.run(['node', '-e', script, str(target / 'SideStore-signed.ipa.enc'), password + 'wrong'], capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+
     def test_state_encryption_authenticates_password_and_contents(self):
         password = "a-test-password-with-more-than-20-characters"
         encrypted = actions.seal(b"private signing key", password)
