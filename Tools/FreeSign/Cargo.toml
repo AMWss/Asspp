@@ -1,0 +1,12 @@
+[package]
+name = "asspp-free-sign"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+isideload = { git = "https://github.com/nab138/isideload", rev = "326e56229d0727cb6e7b34c8cf03e37e2cd3e17d", default-features = false, features = ["fs-storage", "tokio-mt", "install"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+plist = "1"
+rootcause = "0.12"
+serde = { version = "1", features = ["derive"] }

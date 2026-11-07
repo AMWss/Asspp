@@ -1,0 +1,168 @@
+name: Free Apple ID signing engine
+
+on:
+  workflow_call:
+    inputs:
+      operation:
+        type: string
+        required: true
+      target_run_id:
+        type: string
+        default: ""
+    secrets:
+      APPLE_ID:
+        required: false
+      APPLE_PASSWORD:
+        required: false
+      IPHONE_UDID:
+        required: false
+      SIGNING_STATE_PASSWORD:
+        required: false
+      APPLE_2FA_CODE:
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sign:
+    if: inputs.operation == 'Sign IPA'
+    runs-on: macos-26
+    timeout-minutes: 45
+    concurrency:
+      group: free-sign-apple-account
+      cancel-in-progress: false
+    steps:
+      - name: Set temporary paths
+        run: |
+          {
+            echo "SIGNING_STATE_DIR=$RUNNER_TEMP/free-sign-state"
+            echo "SIGNING_MAILBOX_DIR=$RUNNER_TEMP/free-sign-mailbox"
+            echo "STATE_ARCHIVE=$RUNNER_TEMP/state.enc"
+            echo "INPUT_IPA=$RUNNER_TEMP/Asspp-unsigned.ipa"
+            echo "SIGNED_IPA=$RUNNER_TEMP/Asspp-signed.ipa"
+            echo "SIGNED_APP_PATH_FILE=$RUNNER_TEMP/signed-app-path.txt"
+          } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: self-sign
+          persist-credentials: false
+      - name: Check required Secrets
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          IPHONE_UDID: ${{ secrets.IPHONE_UDID }}
+          SIGNING_STATE_PASSWORD: ${{ secrets.SIGNING_STATE_PASSWORD }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          for name in ('APPLE_ID', 'APPLE_PASSWORD', 'IPHONE_UDID', 'SIGNING_STATE_PASSWORD'):
+              if not os.environ.get(name):
+                  raise SystemExit(f'Missing required Secret: {name}')
+          if len(os.environ['SIGNING_STATE_PASSWORD']) < 20:
+              raise SystemExit('SIGNING_STATE_PASSWORD requires at least 20 characters')
+          if not re.fullmatch(r'[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}|[0-9A-Fa-f]{40}', os.environ['IPHONE_UDID']):
+              raise SystemExit('IPHONE_UDID does not look like an Apple device UDID')
+          PY
+      - name: Prepare Python environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/free-sign-python"
+          "$RUNNER_TEMP/free-sign-python/bin/pip" install 'cryptography==46.0.3'
+          echo "$RUNNER_TEMP/free-sign-python/bin" >> "$GITHUB_PATH"
+      - name: Compile pinned signer
+        working-directory: Tools/FreeSign
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          cargo +1.99.1 build --locked --release
+      - name: Run offline safety checks
+        run: python3 -m unittest discover -s Tools/FreeSign/tests -v
+      - name: Restore encrypted signing state
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          SIGNING_STATE_PASSWORD: ${{ secrets.SIGNING_STATE_PASSWORD }}
+        run: python3 Tools/FreeSign/actions.py restore
+      - name: Prepare verification code mailbox
+        run: python3 Tools/FreeSign/actions.py init
+      - name: Publish public verification request
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-sign-request-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/free-sign-mailbox/request.json
+          retention-days: 1
+      - name: Download official Asspp IPA
+        run: python3 Tools/FreeSign/actions.py download
+      - name: Sign with your Apple ID
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          IPHONE_UDID: ${{ secrets.IPHONE_UDID }}
+          SIGNING_STATE_PASSWORD: ${{ secrets.SIGNING_STATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          ANISETTE_URL: ${{ vars.ANISETTE_URL || 'https://ani.iloader.app' }}
+        run: |
+          echo "If Apple asks for a code, set APPLE_2FA_CODE and start another run with operation Send verification code." >> "$GITHUB_STEP_SUMMARY"
+          echo "Waiting run ID: $GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          export SIGNING_HELPER="$GITHUB_WORKSPACE/Tools/FreeSign/actions.py"
+          Tools/FreeSign/target/release/asspp-free-sign
+      - name: Validate and package signed IPA
+        env:
+          IPHONE_UDID: ${{ secrets.IPHONE_UDID }}
+        run: python3 Tools/FreeSign/actions.py package
+      - name: Downloadable signed IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Asspp-signed
+          path: ${{ runner.temp }}/Asspp-signed.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - name: Encrypt updated signing state
+        if: always() && steps.state.outcome == 'success'
+        env:
+          SIGNING_STATE_PASSWORD: ${{ secrets.SIGNING_STATE_PASSWORD }}
+        run: python3 Tools/FreeSign/actions.py save
+      - name: Persist encrypted state
+        if: always() && steps.state.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.state.outputs.state_name }}
+          path: ${{ runner.temp }}/state.enc
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -rf "$SIGNING_STATE_DIR" "$SIGNING_MAILBOX_DIR"
+
+  verification-code:
+    if: inputs.operation == 'Send verification code'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Set temporary path
+        run: echo "CODE_ARCHIVE=$RUNNER_TEMP/code.enc" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: self-sign
+          persist-credentials: false
+      - name: Prepare Python environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/free-sign-python"
+          "$RUNNER_TEMP/free-sign-python/bin/pip" install 'cryptography==46.0.3'
+          echo "$RUNNER_TEMP/free-sign-python/bin" >> "$GITHUB_PATH"
+      - name: Encrypt verification code for waiting run
+        id: deliver
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
+          TARGET_RUN_ID: ${{ inputs.target_run_id }}
+        run: python3 Tools/FreeSign/actions.py deliver
+      - name: Deliver encrypted code
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-sign-code-${{ steps.deliver.outputs.target_run_id }}
+          path: ${{ runner.temp }}/code.enc
+          if-no-files-found: error
+          retention-days: 1

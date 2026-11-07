@@ -1,0 +1,34 @@
+name: Apple ID Free Sign
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Operation
+        type: choice
+        options:
+          - Sign IPA
+          - Send verification code
+        default: Sign IPA
+      target_run_id:
+        description: Waiting run ID (usually leave empty)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  signer:
+    if: github.repository == 'AMWss/Asspp'
+    uses: AMWss/Asspp/.github/workflows/free-sign-engine.yml@self-sign
+    with:
+      operation: ${{ inputs.operation }}
+      target_run_id: ${{ inputs.target_run_id }}
+    secrets:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      IPHONE_UDID: ${{ secrets.IPHONE_UDID }}
+      SIGNING_STATE_PASSWORD: ${{ secrets.SIGNING_STATE_PASSWORD }}
+      APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
