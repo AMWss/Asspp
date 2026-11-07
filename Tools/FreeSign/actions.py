@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 
 class Redirect(urllib.request.HTTPRedirectHandler):
@@ -193,7 +194,14 @@ def deliver():
     target = os.environ.get("TARGET_RUN_ID", "").strip()
     if target and not target.isdigit():
         raise ValueError("Target run ID must be numeric")
-    active = api("actions/workflows/free-sign.yml/runs?status=in_progress&per_page=100")["workflow_runs"]
+    active = []
+    for workflow in ("free-sign.yml", "sidestore-sign.yml"):
+        try:
+            active.extend(api(f"actions/workflows/{workflow}/runs?status=in_progress&per_page=100")["workflow_runs"])
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+    active = list({run['id']: run for run in active}.values())
     active_ids = {str(run["id"]) for run in active}
     candidates = []
     for run in active:
@@ -223,14 +231,24 @@ def deliver():
 
 
 def download():
-    release = json.loads(fetch("https://api.github.com/repos/Lakr233/Asspp/releases/latest"))
-    asset = next(a for a in release["assets"] if a["name"] == "Asspp.ipa")
+    application = os.environ.get("SIGNING_APPLICATION", "Asspp")
+    if application == "SideStore":
+        release_url = "https://api.github.com/repos/SideStore/SideStore/releases/tags/nightly"
+        asset_name = "SideStore.ipa"
+    elif application == "Asspp":
+        release_url = "https://api.github.com/repos/Lakr233/Asspp/releases/latest"
+        asset_name = "Asspp.ipa"
+    else:
+        raise ValueError("Unknown signing application")
+    release = json.loads(fetch(release_url))
+    asset = next(a for a in release["assets"] if a["name"] == asset_name)
     data = fetch(asset["browser_download_url"], limit=600 * 1024 * 1024)
     if (asset.get("digest") or "").startswith("sha256:"):
         if hashlib.sha256(data).hexdigest() != asset["digest"].split(":", 1)[1]:
             raise ValueError("IPA checksum mismatch")
     Path(os.environ["INPUT_IPA"]).write_bytes(data)
-    print("Downloaded upstream Asspp release " + release["tag_name"])
+    print("Downloaded official " + application + " release " + release["tag_name"])
+    output("input_release", release["tag_name"])
 
 
 def package():
@@ -257,8 +275,25 @@ def package():
     print("Signed IPA passed signature, device, bundle ID and profile expiry checks.")
 
 
+def protect_package():
+    """SideStore embeds a private signing identity: never publish its raw IPA."""
+    password = os.environ["SIGNING_STATE_PASSWORD"]
+    if len(password) < 20:
+        raise ValueError("Package password is too short")
+    salt, nonce = os.urandom(16), os.urandom(12)
+    header = b"ASIP1" + salt + nonce
+    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=600000).derive(password.encode())
+    encrypted = AESGCM(key).encrypt(nonce, Path(os.environ["SIGNED_IPA"]).read_bytes(), header)
+    folder = Path(os.environ["PROTECTED_PACKAGE_DIR"])
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "SideStore-signed.ipa.enc").write_bytes(header + encrypted)
+    shutil.copyfile(Path(__file__).with_name("decrypt-package.html"), folder / "decrypt-package.html")
+    (folder / "README.txt").write_text("Extract this artifact ZIP. Open decrypt-package.html in Chrome or Edge, select SideStore-signed.ipa.enc, and enter your existing SIGNING_STATE_PASSWORD locally. It downloads SideStore-signed.ipa. Do not upload the decrypted IPA: SideStore includes your signing identity. Pairing and first refresh must still be completed on your iPhone.\n")
+    print("SideStore package encrypted; the raw IPA and private signing identity will not be uploaded.")
+
+
 if __name__ == "__main__":
-    commands = {"restore": restore, "save": save, "init": initialize, "wait-code": wait_code, "deliver": deliver, "download": download, "package": package}
+    commands = {"restore": restore, "save": save, "init": initialize, "wait-code": wait_code, "deliver": deliver, "download": download, "package": package, "protect-package": protect_package}
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=commands)
     args = parser.parse_args()
