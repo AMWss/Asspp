@@ -20,6 +20,10 @@ HTTPS 的 IPA 直链会下载文件。网页安装由 `itms-services://?action=d
 4. 同一份签名 IPA 放到受控 HTTPS 地址，以单独的 manifest 测试 Safari OTA。在新装及覆盖更新场景分别记录系统版本、安装提示、是否能启动以及签名有效期。若侧载成功但 Safari 安装失败，就保留 Actions 打包加 SideStore 签装的流程。
 5. 只有 Safari 安装实验通过，才值得把签名和 manifest 发布接进 Actions。可优先使用预生成的签名材料，或在用户控制的自托管 runner 上使用本地开发者会话。后者还需验证会话过期后如何处理 2FA。
 
+## Actions 中的签名步骤
+
+如果能导出证书及私钥（`.p12`）和对应的 `.mobileprovision`，可在 macOS runner 用 Xcode 签名，也可用 [`zsign`](https://github.com/zhlynn/zsign/blob/master/README.zh-CN.md) 给现成 IPA 重签。构建、签名和网页发布可以拆开。签名前核对描述文件的有效期、设备及 Bundle ID，签名后核对 IPA 的签名和内嵌描述文件。普通 Apple ID 的 7 天描述文件仍须另行续期。`zsign` 能使用已有材料，获取证书、注册设备和续期仍由 Apple 登录工具处理。
+
 现有 [iPhone OTA 工作流](https://github.com/AMWss/Asspp/actions/workflows/upstream-signed-ios.yml) 仍用 Apple 分发证书及 Ad Hoc 描述文件。免费签名实验与这条发布流程分开。账号密码、验证码、会话和设备配对文件留在用户控制的设备。公开的已签名 IPA 可能暴露其描述文件内的设备 UDID。
 
 ## 参考
