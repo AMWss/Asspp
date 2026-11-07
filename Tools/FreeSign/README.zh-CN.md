@@ -68,4 +68,7 @@ Apple ID Free Sign 入口运行 Send verification code（可填等待中的 run 
 页面禁止网络连接；不要公开分享解密后的 IPA。
 
 该 IPA 仅完成签名，未注入配对文件。安装后仍需要配置 Remote Pairing、
-LocalDevVPN 并完成首次刷新。不得为解决证书数量问题自动撤销已有证书。
+LocalDevVPN 并完成首次刷新。默认不会为解决证书数量问题撤销已有证书。只有用户明确授权，并启用
+`Sign SideStore Nightly` 的 `reset_all_certificates` 开关时，才会先撤销
+当前所选 Apple Team 的全部 iOS 开发证书，再生成新证书。开关默认为 false；
+撤销可能导致原有自签应用需要重新安装。
