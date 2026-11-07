@@ -1,12 +1,11 @@
 name: iPadOS 16 - Compatibility Check
 
 on:
-  schedule:
-    - cron: "11,41 * * * *"
   push:
-    branches: [main, ios16]
+    branches: [ios16]
   pull_request:
-  workflow_dispatch:
+    branches: [ios16]
+  workflow_call:
 
 permissions:
   contents: read
@@ -22,11 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       source_sha: ${{ steps.detect.outputs.source_sha }}
+      compatibility_sha: ${{ steps.detect.outputs.compatibility_sha }}
       artifact_name: ${{ steps.detect.outputs.artifact_name }}
       should_build: ${{ steps.detect.outputs.should_build }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_name == 'main' && 'ios16' || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Check patch and OTA packaging
@@ -39,7 +40,8 @@ jobs:
           set -euo pipefail
           SHA=$(git ls-remote https://github.com/Lakr233/Asspp.git refs/heads/main | cut -f1)
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
-          NAME="Asspp-iPad16-unsigned-${SHA:0:12}-${GITHUB_SHA:0:12}"
+          COMPATIBILITY_SHA=$(git rev-parse HEAD)
+          NAME="Asspp-iPad16-unsigned-${SHA:0:12}-${COMPATIBILITY_SHA:0:12}"
           SHOULD_BUILD=true
           if [ "$GITHUB_EVENT_NAME" = schedule ]; then
             COUNT=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '[.artifacts[] | select(.expired == false)] | length')
@@ -47,6 +49,7 @@ jobs:
           fi
           {
             echo "source_sha=$SHA"
+            echo "compatibility_sha=$COMPATIBILITY_SHA"
             echo "artifact_name=$NAME"
             echo "should_build=$SHOULD_BUILD"
           } >> "$GITHUB_OUTPUT"
@@ -60,6 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.validate.outputs.compatibility_sha }}
           path: compatibility
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -98,6 +102,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          COMPATIBILITY_SHA: ${{ needs.validate.outputs.compatibility_sha }}
           ARTIFACT_NAME: ${{ needs.validate.outputs.artifact_name }}
         run: |
           set -euo pipefail
@@ -106,7 +111,7 @@ jobs:
           Asspp for iPadOS 16.0 and later, iPad only. Install the IPA using TrollStore.
 
           - Upstream source: https://github.com/Lakr233/Asspp/commit/${SOURCE_SHA}
-          - Compatibility source: https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}
+          - Compatibility source: https://github.com/${GITHUB_REPOSITORY}/commit/${COMPATIBILITY_SHA}
           - Passed Xcode compilation, minimum OS checks and IPA metadata validation.
           - Apple ID login and App Store download still require testing on your device.
           - This unsigned iPad build is not the iPhone Safari OTA package.
