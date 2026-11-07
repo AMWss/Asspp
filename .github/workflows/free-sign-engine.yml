@@ -3,6 +3,9 @@ name: Free Apple ID signing engine
 on:
   workflow_call:
     inputs:
+      application:
+        type: string
+        default: Asspp
       operation:
         type: string
         required: true
@@ -34,6 +37,8 @@ jobs:
     if: inputs.operation == 'Sign IPA'
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      SIGNING_APPLICATION: ${{ inputs.application }}
     concurrency:
       group: free-sign-apple-account
       cancel-in-progress: false
@@ -44,14 +49,21 @@ jobs:
             echo "SIGNING_STATE_DIR=$RUNNER_TEMP/free-sign-state"
             echo "SIGNING_MAILBOX_DIR=$RUNNER_TEMP/free-sign-mailbox"
             echo "STATE_ARCHIVE=$RUNNER_TEMP/state.enc"
-            echo "INPUT_IPA=$RUNNER_TEMP/Asspp-unsigned.ipa"
-            echo "SIGNED_IPA=$RUNNER_TEMP/Asspp-signed.ipa"
+            echo "INPUT_IPA=$RUNNER_TEMP/$SIGNING_APPLICATION-unsigned.ipa"
+            echo "SIGNED_IPA=$RUNNER_TEMP/$SIGNING_APPLICATION-signed.ipa"
+            echo "PROTECTED_PACKAGE_DIR=$RUNNER_TEMP/protected-package"
             echo "SIGNED_APP_PATH_FILE=$RUNNER_TEMP/signed-app-path.txt"
           } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           ref: self-sign
           persist-credentials: false
+      - name: Check selected application
+        run: |
+          case "$SIGNING_APPLICATION" in
+            Asspp|SideStore) ;;
+            *) echo "Unsupported application"; exit 1 ;;
+          esac
       - name: Check required Secrets
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -82,14 +94,14 @@ jobs:
       - name: Run offline safety checks
         run: python3 -m unittest discover -s Tools/FreeSign/tests -v
       - name: Checkout application source
-        if: inputs.build_from_source
+        if: inputs.application == 'Asspp' && inputs.build_from_source
         uses: actions/checkout@v4
         with:
           ref: main
           path: app-source
           persist-credentials: false
       - name: Build unsigned IPA from main
-        if: inputs.build_from_source
+        if: inputs.application == 'Asspp' && inputs.build_from_source
         working-directory: app-source
         run: |
           set -euo pipefail
@@ -127,8 +139,8 @@ jobs:
           name: free-sign-request-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/free-sign-mailbox/request.json
           retention-days: 1
-      - name: Download official Asspp IPA
-        if: ${{ !inputs.build_from_source }}
+      - name: Download official upstream IPA
+        if: inputs.application == 'SideStore' || !inputs.build_from_source
         run: python3 Tools/FreeSign/actions.py download
       - name: Sign with your Apple ID
         env:
@@ -149,13 +161,28 @@ jobs:
           IPHONE_UDID: ${{ secrets.IPHONE_UDID }}
         run: python3 Tools/FreeSign/actions.py package
       - name: Downloadable signed IPA
+        if: inputs.application == 'Asspp'
         uses: actions/upload-artifact@v4
         with:
           name: Asspp-signed
           path: ${{ runner.temp }}/Asspp-signed.ipa
           if-no-files-found: error
           retention-days: 7
+      - name: Protect SideStore package containing private signing identity
+        if: inputs.application == 'SideStore'
+        env:
+          SIGNING_STATE_PASSWORD: ${{ secrets.SIGNING_STATE_PASSWORD }}
+        run: python3 Tools/FreeSign/actions.py protect-package
+      - name: Download encrypted SideStore IPA and local decryptor
+        if: inputs.application == 'SideStore'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SideStore-signed-private
+          path: ${{ runner.temp }}/protected-package/
+          if-no-files-found: error
+          retention-days: 3
       - name: Publish signed IPA to Safari installation website
+        if: inputs.application == 'Asspp'
         run: python3 Tools/FreeSign/publish.py
       - name: Encrypt updated signing state
         if: always() && steps.state.outcome == 'success'
