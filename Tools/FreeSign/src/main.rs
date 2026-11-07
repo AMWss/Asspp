@@ -3,7 +3,7 @@ use std::{env, fs, future, path::PathBuf};
 use isideload::{
     anisette::remote_v3::RemoteV3AnisetteProvider,
     auth::apple_account::{AppleAccount, TwoFactorCallbackParams, TwoFactorCallbackResponse},
-    dev::{developer_session::DeveloperSession, devices::DevicesApi, teams::TeamsApi},
+    dev::{certificates::CertificatesApi, developer_session::DeveloperSession, devices::DevicesApi, teams::TeamsApi},
     sideload::{SideloaderBuilder, TeamSelection, builder::MaxCertsBehavior},
     util::{
         callbacks::{ExtensionsBehaviorCallbackBox, MaxCertsCallbackBox},
@@ -89,6 +89,20 @@ async fn run() -> Result<(), Report> {
     } else {
         bail!("Multiple Apple teams available. Set APPLE_TEAM_ID to select one.");
     };
+    if env::var("RESET_ALL_DEVELOPMENT_CERTIFICATES").as_deref() == Ok("true") {
+        let certificates = session.list_ios_certs(&team).await?;
+        // Validate the complete selection before starting the explicitly authorized reset.
+        let serials: Vec<String> = certificates
+            .iter()
+            .map(|certificate| certificate.serial_number.clone()
+                .ok_or_else(|| report!("A development certificate has no serial; reset stopped")))
+            .collect::<Result<_, _>>()?;
+        println!("::notice::Performing the user-authorized one-time reset of {} iOS development certificate(s).", serials.len());
+        for serial in serials {
+            session.revoke_development_cert(&team, &serial, None).await?;
+        }
+        println!("::notice::The selected development certificates were revoked. Creating a fresh signing identity next.");
+    }
     println!("Registering the target device and obtaining signing materials.");
     session
         .ensure_device_registered(&team, "Asspp iPhone", &udid, None)
