@@ -3,6 +3,9 @@ name: Free Apple ID signing engine
 on:
   workflow_call:
     inputs:
+      reset_all_certificates:
+        type: boolean
+        default: false
       application:
         type: string
         default: Asspp
@@ -144,6 +147,7 @@ jobs:
         run: python3 Tools/FreeSign/actions.py download
       - name: Sign with your Apple ID
         env:
+          RESET_ALL_DEVELOPMENT_CERTIFICATES: ${{ inputs.reset_all_certificates }}
           GH_TOKEN: ${{ github.token }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
