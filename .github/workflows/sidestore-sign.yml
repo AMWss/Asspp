@@ -1,0 +1,27 @@
+name: Sign SideStore Nightly
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/sidestore-sign.yml]
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  signer:
+    if: github.repository == 'AMWss/Asspp'
+    uses: AMWss/Asspp/.github/workflows/free-sign-engine.yml@self-sign
+    with:
+      operation: Sign IPA
+      application: SideStore
+      build_from_source: false
+    secrets:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      IPHONE_UDID: ${{ secrets.IPHONE_UDID }}
+      SIGNING_STATE_PASSWORD: ${{ secrets.SIGNING_STATE_PASSWORD }}
+      APPLE_2FA_CODE: ${{ secrets.APPLE_2FA_CODE }}
