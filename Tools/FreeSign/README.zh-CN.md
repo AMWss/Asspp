@@ -52,3 +52,20 @@
 签名后使用安装工具在目标设备上安装，网页分发不属于本实验。
 
 源码固定到 [isideload 326e562](https://github.com/nab138/isideload/tree/326e56229d0727cb6e7b34c8cf03e37e2cd3e17d)。
+
+## SideStore Nightly
+
+在默认分支的 Actions 中运行 **Sign SideStore Nightly**。该工作流下载
+SideStore/SideStore 官方 nightly release 的 SideStore.ipa，复用已有 Secrets、
+加密登录状态和签名证书；不构建或覆盖 Asspp。Apple 要求验证码时，仍在
+Apple ID Free Sign 入口运行 Send verification code（可填等待中的 run ID）。
+
+签名库会自动配置 SideStore 的 App Group 并嵌入续签证书私钥，因此本产物
+**不能公开发布到安装站或 Release**。工作流只上传 `SideStore-signed-private`，
+里面包括 `SideStore-signed.ipa.enc`、`decrypt-package.html` 和说明文件。
+下载并解压 ZIP 后，在电脑 Chrome/Edge 打开解密页面，选择 `.enc` 文件并
+填写已有的 SIGNING_STATE_PASSWORD，在本机解密获得 `SideStore-signed.ipa`。
+页面禁止网络连接；不要公开分享解密后的 IPA。
+
+该 IPA 仅完成签名，未注入配对文件。安装后仍需要配置 Remote Pairing、
+LocalDevVPN 并完成首次刷新。不得为解决证书数量问题自动撤销已有证书。
