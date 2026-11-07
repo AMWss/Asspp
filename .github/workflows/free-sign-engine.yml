@@ -24,6 +24,7 @@ on:
 permissions:
   contents: read
   actions: read
+  id-token: write
 
 jobs:
   sign:
@@ -119,6 +120,8 @@ jobs:
           path: ${{ runner.temp }}/Asspp-signed.ipa
           if-no-files-found: error
           retention-days: 7
+      - name: Publish signed IPA to Safari installation website
+        run: python3 Tools/FreeSign/publish.py
       - name: Encrypt updated signing state
         if: always() && steps.state.outcome == 'success'
         env:
